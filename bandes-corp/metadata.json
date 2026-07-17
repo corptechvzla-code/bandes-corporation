@@ -1,0 +1,6 @@
+{
+  "name": "Bandes Gold Traceability",
+  "description": "High-end real-time gold traceability platform featuring interactive dashboards, gold casting process tracking, incoming ingot management, and outgoing transactions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
