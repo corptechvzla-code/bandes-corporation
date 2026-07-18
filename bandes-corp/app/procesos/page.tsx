@@ -32,10 +32,12 @@ export default function ProcesosPage() {
   const [batchSuccess, setBatchSuccess] = useState<string>('');
   const [activeLot, setActiveLot] = useState<CastingLot | null>(null);
   const [recoveredWeight, setRecoveredWeight] = useState<string>('');
+  const [recoveredLey, setRecoveredLey] = useState<string>('');
+  const [recoveredLeyAg, setRecoveredLeyAg] = useState<string>('');
   const [modalError, setModalError] = useState<string>('');
 
   const availableBars = useMemo(() => {
-    return goldBars.filter(b => b.available && b.status === 'INGRESADO');
+    return goldBars.filter(b => b.available && b.status === 'CONFIRMADO');
   }, [goldBars]);
 
   const activeCastingLots = useMemo(() => {
@@ -126,6 +128,8 @@ export default function ProcesosPage() {
   const handleOpenRecoveryModal = (lot: CastingLot) => {
     setActiveLot(lot);
     setRecoveredWeight(lot.expectedTotal.toFixed(2));
+    setRecoveredLey(lot.recoveredLey?.toString() ?? '');
+    setRecoveredLeyAg(lot.recoveredLeyAg?.toString() ?? '');
     setModalError('');
   };
 
@@ -143,16 +147,23 @@ export default function ProcesosPage() {
 
     const discrepancy = Math.abs(recWeight - activeLot.expectedTotal) / activeLot.expectedTotal;
     if (discrepancy > 0.1) {
-      if (!window.confirm(`Discrepancia del ${(discrepancy * 100).toFixed(1)}% detectada con el Fino Esperado (${activeLot.expectedTotal.toFixed(2)}g). ¿Desea proceder con esta calibración?`)) {
+      if (!window.confirm(`Discrepancia del ${(discrepancy * 100).toFixed(1)}% detectada con el peso teórico (${activeLot.expectedTotal.toFixed(2)}g). ¿Desea proceder con esta calibración?`)) {
         return;
       }
     }
 
-    const result = completeCastingLot(activeLot.id, recWeight);
+    const result = completeCastingLot(
+      activeLot.id,
+      recWeight,
+      recoveredLey.trim() ? parseFloat(recoveredLey) : null,
+      recoveredLeyAg.trim() ? parseFloat(recoveredLeyAg) : null
+    );
 
     if (result.success) {
       setActiveLot(null);
       setRecoveredWeight('');
+      setRecoveredLey('');
+      setRecoveredLeyAg('');
     } else {
       setModalError(result.error || 'Ocurrió un error al registrar la recuperación.');
     }
@@ -174,10 +185,10 @@ export default function ProcesosPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-sans font-medium text-[#E5E5E5] tracking-tight flex items-center gap-2">
             <Flame className="w-8 h-8 text-[#A65B17] filter drop-shadow-[0_0_8px_rgba(166,91,23,0.3)] animate-pulse" />
-            Monitoreo de Procesos <span className="text-[#D5B042] font-semibold">Fundición y Moldes</span>
+            Monitoreo <span className="text-[#D5B042] font-semibold">de Procesos</span>
           </h1>
           <p className="text-xs text-[#8C8C8C] mt-1">
-            Supervise el vertido térmico de oro en crisoles a 1,064°C. Agrupe barras, simule enfriamientos incipientes y registre la masa recuperada para la entrega.
+            Supervise sus procesos. Agrupe barras  y registre la masa recuperada para la entrega.
           </p>
         </div>
 
@@ -320,7 +331,7 @@ export default function ProcesosPage() {
                       <strong className="text-[#E5E5E5] text-sm">{selectedMetrics.weight.toLocaleString()} g</strong>
                     </div>
                     <div>
-                      <span className="text-[9px] text-[#8C8C8C]/50 uppercase block">Fino Esperado Au</span>
+                      <span className="text-[9px] text-[#8C8C8C]/50 uppercase block">Peso Teórico Au</span>
                       <strong className="text-[#D5B042] text-sm">{selectedMetrics.expected.toLocaleString()} g</strong>
                     </div>
                   </div>
@@ -577,22 +588,11 @@ export default function ProcesosPage() {
                   <span>Fino Analítico (FA) Teórico:</span>
                   <span className="text-[#E5E5E5] font-bold">{activeLot.analyticalTotal.toLocaleString()} g Au</span>
                 </div>
-                <div className="flex justify-between text-[#D5B042] border-t border-neutral-800/20 pt-2 font-bold">
-                  <span>Fino Esperado (FE - 99.0%):</span>
-                  <span>{activeLot.expectedTotal.toLocaleString()} g Au</span>
-                </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Masa Final Recuperada (g de Oro Puro)</label>
-                  <button
-                    type="button"
-                    onClick={() => setRecoveredWeight(activeLot.expectedTotal.toFixed(2))}
-                    className="text-[#D5B042] hover:underline text-[10px] font-semibold"
-                  >
-                    Usar Fino Esperado (100% Eficiencia)
-                  </button>
                 </div>
                 <div className="relative">
                   <input
@@ -606,9 +606,46 @@ export default function ProcesosPage() {
                   />
                   <span className="absolute right-4 top-3 text-xs font-mono text-[#8C8C8C]">g Au</span>
                 </div>
-                <span className="text-[10px] text-[#8C8C8C]/50 leading-normal block">
-                  *Esta masa fina recuperada se distribuirá proporcionalmente entre las barras originales del lote para garantizar la trazabilidad molecular.
-                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Ley de Oro Recuperada</label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="1000"
+                      placeholder="Ej: 995"
+                      value={recoveredLey}
+                      onChange={(e) => setRecoveredLey(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg pl-4 pr-12 py-3 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                    />
+                    <span className="absolute right-4 top-3 text-xs font-mono text-[#8C8C8C]">‰ Au</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Ley de Plata Recuperada</label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="1000"
+                      placeholder="Ej: 5"
+                      value={recoveredLeyAg}
+                      onChange={(e) => setRecoveredLeyAg(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg pl-4 pr-12 py-3 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                    />
+                    <span className="absolute right-4 top-3 text-xs font-mono text-[#8C8C8C]">‰ Ag</span>
+                  </div>
+                </div>
               </div>
 
               {modalError && (
@@ -630,7 +667,7 @@ export default function ProcesosPage() {
                   className="flex-1 py-3 bg-gradient-to-r from-[#A65B17] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider hover:brightness-110 transition-all duration-200 rounded-xl cursor-pointer shadow-[0_4px_12px_rgba(166,91,23,0.3)] flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4 text-black" />
-                  Confirmar colada (OUT-MOLD)
+                  Confirmar colada
                 </button>
               </div>
 
