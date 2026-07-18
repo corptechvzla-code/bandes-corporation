@@ -19,11 +19,16 @@ import {
   Check, 
   Scale, 
   Sparkles,
-  Info
+  Info,
+  Pencil,
+  Camera,
+  Weight,
+  Microscope,
+  X
 } from 'lucide-react';
 
 export default function IngresosPage() {
-  const { suppliers, goldBars, addGoldBar, addGoldBarsBulk, deleteGoldBar } = useGoldTraceability();
+  const { suppliers, goldBars, addGoldBar, addGoldBarsBulk, deleteGoldBar, updateGoldBar } = useGoldTraceability();
 
   const [showForm, setShowForm] = useState<boolean>(false);
   const [supplierId, setSupplierId] = useState<string>(suppliers[0]?.id || '');
@@ -41,6 +46,14 @@ export default function IngresosPage() {
   const [confirmDeleteCode, setConfirmDeleteCode] = useState<string | null>(null);
   const [deletingState, setDeletingState] = useState<{ code: string; status: 'deleting' | 'success' } | null>(null);
   const [ingestingState, setIngestingState] = useState<{ code: string; status: 'ingesting' | 'success' } | null>(null);
+  const [editingBar, setEditingBar] = useState<GoldBar | null>(null);
+  const [editGrossWeight, setEditGrossWeight] = useState<string>('');
+  const [editLey, setEditLey] = useState<string>('');
+  const [editLeyAg, setEditLeyAg] = useState<string>('');
+  const [editPhoto, setEditPhoto] = useState<string | null>(null);
+  const [formPhoto, setFormPhoto] = useState<string | null>(null);
+  const [confirmSaveChanges, setConfirmSaveChanges] = useState<boolean>(false);
+  const [selectedBar, setSelectedBar] = useState<GoldBar | null>(null);
   const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>({
     'SUP-01': true,
     'SUP-02': true,
@@ -53,10 +66,6 @@ export default function IngresosPage() {
     if (isNaN(w) || isNaN(l)) return 0;
     return w * (l / 1000);
   }, [grossWeight, ley]);
-
-  const liveFE = useMemo(() => {
-    return liveFA * 0.99;
-  }, [liveFA]);
 
   const liveAnalyticalAg = useMemo(() => {
     const w = parseFloat(grossWeight);
@@ -118,6 +127,7 @@ export default function IngresosPage() {
       setGrossWeight('');
       setLey('');
       setLeyAg('');
+      setFormPhoto(null);
       setIngestingState({ code: upperCode, status: 'ingesting' });
       setTimeout(() => {
         setIngestingState({ code: upperCode, status: 'success' });
@@ -182,7 +192,44 @@ export default function IngresosPage() {
   };
 
   const downloadExcelTemplate = () => {
-    alert('Simulación de Descarga: El archivo "Bandes_Carga_Masiva_Template.xlsx" ha sido generado con las columnas (CÓDIGO, PESO BRUTO, LEY Au, LEY Ag, LOTE Nº) y descargado con éxito.');
+    alert('Simulación de Descarga: El archivo "Control_Mining_Carga_Masiva_Template.xlsx" ha sido generado con las columnas (CÓDIGO, PESO BRUTO, LEY Au, LEY Ag, LOTE Nº) y descargado con éxito.');
+  };
+
+  const openEditModal = (bar: GoldBar) => {
+    setEditingBar(bar);
+    setEditGrossWeight(bar.grossWeight.toString());
+    setEditLey(bar.ley.toString());
+    setEditLeyAg((bar.leyAg || 0).toString());
+    setEditPhoto(null);
+  };
+
+  const saveEditModal = () => {
+    if (!editingBar) return;
+    const gw = parseFloat(editGrossWeight);
+    const l = parseFloat(editLey);
+    const la = parseFloat(editLeyAg);
+    if (isNaN(gw) || gw <= 0 || isNaN(l) || isNaN(la)) return;
+
+    const origGw = editingBar.grossWeight;
+    const origL = editingBar.ley;
+    const origLa = editingBar.leyAg || 0;
+    const hasChanges = gw !== origGw || l !== origL || la !== origLa;
+
+    if (!hasChanges) {
+      setEditingBar(null);
+      return;
+    }
+    setConfirmSaveChanges(true);
+  };
+
+  const confirmSaveEdit = () => {
+    if (!editingBar) return;
+    const gw = parseFloat(editGrossWeight);
+    const l = parseFloat(editLey);
+    const la = parseFloat(editLeyAg);
+    updateGoldBar(editingBar.code, gw, l, la);
+    setConfirmSaveChanges(false);
+    setEditingBar(null);
   };
 
   const filteredBars = useMemo(() => {
@@ -223,10 +270,10 @@ export default function IngresosPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-sans font-medium text-[#E5E5E5] tracking-tight flex items-center gap-2">
             <ClipboardList className="w-8 h-8 text-[#D5B042] filter drop-shadow-[0_0_8px_rgba(213,176,66,0.3)]" />
-            Ingreso de Material <span className="text-[#D5B042] font-semibold">Gold Ingestion</span>
+            Ingreso <span className="text-[#D5B042] font-semibold">de Material</span>
           </h1>
           <p className="text-xs text-[#8C8C8C] mt-1">
-            Registro físico de barras de oro crudo. Calcule leyes analíticas al instante, realice cargas de plantilla masivas y agrupe stocks por cliente.
+            Registro físico de barras de oro crudo. Calcule leyes analíticas al instante y realice cargas de plantilla masivas.
           </p>
         </div>
 
@@ -264,7 +311,7 @@ export default function IngresosPage() {
             <form onSubmit={handleSubmitBar} className="space-y-4">
               
               <div className="space-y-1">
-                <label className="text-[11px] font-mono text-[#8C8C8C] uppercase">Cliente / Socio</label>
+                <label className="text-[11px] font-mono text-[#8C8C8C] uppercase">Proveedor / Socio</label>
                 <select
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value)}
@@ -363,21 +410,61 @@ export default function IngresosPage() {
                 </div>
               )}
 
+              <div className="border-t border-neutral-800/20 pt-4 space-y-2">
+                <span className="text-[9px] font-mono text-[#8C8C8C] uppercase tracking-wider block">Herramientas</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-[#D5B042]/30 hover:bg-[#D5B042]/5 transition-all cursor-pointer">
+                    <Camera className="w-4 h-4 text-[#D5B042]" />
+                    <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Foto</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setFormPhoto(ev.target?.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => alert('Función de obtención de peso desde báscula externa — Próximamente')}
+                    className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all cursor-pointer"
+                  >
+                    <Weight className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Peso</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alert('Función de obtención de leyes desde espectrómetro — Próximamente')}
+                    className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-blue-500/30 hover:bg-blue-500/5 transition-all cursor-pointer"
+                  >
+                    <Microscope className="w-4 h-4 text-blue-400" />
+                    <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Leyes</span>
+                  </button>
+                </div>
+                {formPhoto && (
+                  <div className="relative mt-1">
+                    <img src={formPhoto} alt="Foto de barra" className="w-full h-24 object-cover rounded-lg border border-neutral-800/40" />
+                    <button
+                      type="button"
+                      onClick={() => setFormPhoto(null)}
+                      className="absolute top-1.5 right-1.5 bg-black/80 p-1 rounded-full text-red-400 hover:text-red-300 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="bg-black p-4 rounded-xl border border-neutral-800/40 space-y-2.5">
                 <div className="flex justify-between items-center text-[10px] font-mono text-[#8C8C8C]">
                   <span>Fórmulas de Trazabilidad:</span>
                   <span className="text-[#D5B042] font-semibold">Auto-cálculo</span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono border-t border-neutral-800/20 pt-2">
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-[#8C8C8C]/60 uppercase block">Fino Analítico (FA)</span>
-                    <strong className="text-[#E5E5E5] text-[13px]">{liveFA.toFixed(2)} g</strong>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-[#8C8C8C]/60 uppercase block">Fino Esperado (FE)</span>
-                    <strong className="text-[#E5E5E5] text-[13px]">{liveFE.toFixed(2)} g</strong>
-                  </div>
                 </div>
 
                 {liveAnalyticalAg > 0 && (
@@ -575,7 +662,7 @@ export default function IngresosPage() {
                       <div className="border-t border-neutral-800/20 bg-black p-4 overflow-x-auto">
                         {groupBars.length === 0 ? (
                           <div className="text-center py-6 text-[11px] text-[#8C8C8C] font-sans">
-                            No hay barras activas registradas para este cliente.
+                            No hay barras activas registradas para este proveedor.
                           </div>
                         ) : (
                           <table className="w-full text-left text-xs font-sans">
@@ -585,14 +672,13 @@ export default function IngresosPage() {
                                 <th className="pb-2 text-right">Peso Bruto (g)</th>
                                 <th className="pb-2 text-center">Ley Au / Ag</th>
                                 <th className="pb-2 text-right">FA (Fino Au)</th>
-                                <th className="pb-2 text-right">FE (Au 99%)</th>
                                 <th className="pb-2 text-center">Estado</th>
                                 <th className="pb-2 text-right">Acciones</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-neutral-800/20 text-[#E5E5E5]/90">
                               {groupBars.map(bar => (
-                                <tr key={bar.code} className="hover:bg-[#141414]/85 transition-colors">
+                                <tr key={bar.code} onClick={() => setSelectedBar(bar)} className="hover:bg-[#141414]/85 transition-colors cursor-pointer">
                                   <td className="py-3 font-mono font-bold text-[#D5B042]">{bar.code}</td>
                                   <td className="py-3 text-right font-mono">{bar.grossWeight.toLocaleString()} g</td>
                                   <td className="py-3 text-center font-mono">
@@ -600,27 +686,35 @@ export default function IngresosPage() {
                                     <span className="text-[#8C8C8C]/50"> / {bar.leyAg || 0}‰</span>
                                   </td>
                                   <td className="py-3 text-right font-mono text-[#8C8C8C]">{bar.analytical.toLocaleString()} g</td>
-                                  <td className="py-3 text-right font-mono text-[#8C8C8C]">{bar.expected.toLocaleString()} g</td>
                                   <td className="py-3 text-center">
                                     <span className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-mono font-semibold
-                                      ${bar.status === 'INGRESADO' ? 'bg-[#152B1E] text-emerald-400 border border-emerald-500/10' :
-                                        bar.status === 'PROCESANDO' ? 'bg-black text-[#A65B17] border border-[#A65B17]/20' :
-                                        bar.status === 'COMPLETADO' ? 'bg-black text-[#D5B042] border border-[#D5B042]/20' :
-                                        'bg-blue-900/20 text-blue-400'}`}
+                                      ${bar.verificationStatus === 'POR_VERIFICAR' ? 'bg-red-900/20 text-red-400 border border-red-500/10' :
+                                        'bg-[#152B1E] text-emerald-400 border border-emerald-500/10'}`}
                                     >
-                                      {bar.status}
+                                      {bar.verificationStatus === 'POR_VERIFICAR' ? 'POR VERIFICAR' : 'VERIFICADO'}
                                     </span>
                                   </td>
                                   <td className="py-3 text-right">
-                                    <button
-                                      onClick={() => setConfirmDeleteCode(bar.code)}
-                                      disabled={bar.status !== 'INGRESADO'}
-                                      className={`p-1.5 rounded hover:bg-red-500/10 text-[#8C8C8C] hover:text-red-400 transition-colors cursor-pointer
-                                        ${bar.status !== 'INGRESADO' ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                      title={bar.status !== 'INGRESADO' ? 'No se puede eliminar un material que ya se encuentra en fundición.' : 'Eliminar barra'}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        onClick={() => bar.verificationStatus === 'POR_VERIFICAR' && openEditModal(bar)}
+                                        disabled={bar.verificationStatus !== 'POR_VERIFICAR'}
+                                        className={`p-1.5 rounded hover:bg-[#D5B042]/10 text-[#8C8C8C] hover:text-[#D5B042] transition-colors cursor-pointer
+                                          ${bar.verificationStatus !== 'POR_VERIFICAR' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                        title={bar.verificationStatus !== 'POR_VERIFICAR' ? 'Solo editable en estado POR VERIFICAR' : 'Editar barra'}
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmDeleteCode(bar.code)}
+                                        disabled={bar.verificationStatus !== 'POR_VERIFICAR'}
+                                        className={`p-1.5 rounded hover:bg-red-500/10 text-[#8C8C8C] hover:text-red-400 transition-colors cursor-pointer
+                                          ${bar.verificationStatus !== 'POR_VERIFICAR' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                        title={bar.verificationStatus !== 'POR_VERIFICAR' ? 'Solo se puede eliminar en estado POR VERIFICAR' : 'Eliminar barra'}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
@@ -648,12 +742,6 @@ export default function IngresosPage() {
                   <span className="text-[10px] text-[#8C8C8C]/50 block">MASA BRUTA</span>
                   <strong className="text-[#E5E5E5] text-base font-bold">
                     {(goldBars.reduce((sum, b) => sum + b.grossWeight, 0) / 1000).toFixed(3)} kg
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-[10px] text-[#8C8C8C]/50 block">TOTAL FINO AU ESPERADO</span>
-                  <strong className="text-[#D5B042] text-base font-bold">
-                    {(goldBars.reduce((sum, b) => sum + b.expected, 0) / 1000).toFixed(3)} kg Au
                   </strong>
                 </div>
               </div>
@@ -880,6 +968,367 @@ export default function IngresosPage() {
                     </div>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingBar && (
+          <motion.div
+            key="edit-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="bg-[#1C1C1C] border border-neutral-800/40 rounded-2xl w-full max-w-sm overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.8)]"
+            >
+              <div className="px-5 py-3 bg-gradient-to-b from-black/40 to-transparent border-b border-neutral-800/20 flex justify-between items-center">
+                <div>
+                  <span className="text-[9px] font-mono text-[#A65B17] bg-[#A65B17]/10 border border-[#A65B17]/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                    Edición de Barra
+                  </span>
+                  <h3 className="text-sm font-sans font-bold text-[#E5E5E5] mt-1 tracking-wide">
+                    {editingBar.code}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setEditingBar(null)}
+                  className="text-[#8C8C8C] hover:text-[#E5E5E5] bg-black p-1.5 rounded-lg border border-neutral-800/40 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-3">
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-[#8C8C8C] uppercase">Peso Bruto (g)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editGrossWeight}
+                        onChange={(e) => setEditGrossWeight(e.target.value)}
+                        className="w-full bg-black border border-neutral-800/40 rounded-lg pl-3 pr-8 py-2 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                      />
+                      <span className="absolute right-3 top-2 text-xs font-mono text-[#8C8C8C]">g</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-mono text-[#8C8C8C] uppercase">Ley Au (‰)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          max="1000"
+                          value={editLey}
+                          onChange={(e) => setEditLey(e.target.value)}
+                          className="w-full bg-black border border-neutral-800/40 rounded-lg pl-3 pr-8 py-2 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                        />
+                        <span className="absolute right-3 top-2 text-xs font-mono text-[#8C8C8C]">‰</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-mono text-[#8C8C8C] uppercase">Ley Ag (‰)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          max="1000"
+                          value={editLeyAg}
+                          onChange={(e) => setEditLeyAg(e.target.value)}
+                          className="w-full bg-black border border-neutral-800/40 rounded-lg pl-3 pr-8 py-2 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                        />
+                        <span className="absolute right-3 top-2 text-xs font-mono text-[#8C8C8C]">‰</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-black border border-neutral-800/40 rounded-lg p-2 space-y-1">
+                    <div className="flex justify-between text-[9px] font-mono text-[#8C8C8C]">
+                      <span>FA calculado:</span>
+                      <span className="text-[#E5E5E5] font-bold">
+                        {(() => {
+                          const gw = parseFloat(editGrossWeight) || 0;
+                          const l = parseFloat(editLey) || 0;
+                          return (gw * l / 1000).toFixed(2);
+                        })()} g
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[9px] font-mono text-[#8C8C8C]">
+                      <span>Fino Ag calculado:</span>
+                      <span className="text-[#E5E5E5] font-bold">
+                        {(() => {
+                          const gw = parseFloat(editGrossWeight) || 0;
+                          const la = parseFloat(editLeyAg) || 0;
+                          return (gw * la / 1000).toFixed(2);
+                        })()} g
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-neutral-800/20 pt-3 space-y-2">
+                  <span className="text-[9px] font-mono text-[#8C8C8C] uppercase tracking-wider block">Cargar</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-[#D5B042]/30 hover:bg-[#D5B042]/5 transition-all cursor-pointer">
+                      <Camera className="w-4 h-4 text-[#D5B042]" />
+                      <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Foto</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setEditPhoto(ev.target?.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => alert('Función de obtención de peso desde báscula externa — Próximamente')}
+                      className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all cursor-pointer"
+                    >
+                      <Weight className="w-4 h-4 text-emerald-400" />
+                      <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Peso</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => alert('Función de obtención de leyes desde espectrómetro — Próximamente')}
+                      className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-blue-500/30 hover:bg-blue-500/5 transition-all cursor-pointer"
+                    >
+                      <Microscope className="w-4 h-4 text-blue-400" />
+                      <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Leyes</span>
+                    </button>
+                  </div>
+                  {editPhoto && (
+                    <div className="relative mt-1">
+                      <img src={editPhoto} alt="Foto de barra" className="w-full h-24 object-cover rounded-lg border border-neutral-800/40" />
+                      <button
+                        type="button"
+                        onClick={() => setEditPhoto(null)}
+                        className="absolute top-1.5 right-1.5 bg-black/80 p-1 rounded-full text-red-400 hover:text-red-300 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-5 py-3 bg-black/20 border-t border-neutral-800/20 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingBar(null)}
+                  className="flex-1 py-2 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEditModal}
+                  className="flex-1 py-2 bg-gradient-to-r from-[#A65B17] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider hover:brightness-110 transition-all duration-200 rounded-xl cursor-pointer shadow-[0_4px_12px_rgba(166,91,23,0.3)] flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4 text-black" />
+                  Guardar Cambios
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmSaveChanges && editingBar && (
+          <motion.div
+            key="confirm-save-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="bg-[#1C1C1C] border border-neutral-800/40 rounded-2xl w-full max-w-sm overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.8)]"
+            >
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-[#A65B17]/10 rounded-lg border border-[#A65B17]/20">
+                    <AlertTriangle className="w-5 h-5 text-[#D5B042]" />
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-mono text-[#D5B042] bg-[#D5B042]/10 border border-[#D5B042]/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                      Modificar Barra
+                    </span>
+                    <h3 className="text-sm font-sans font-bold text-[#E5E5E5] mt-1">Confirmar Cambios</h3>
+                  </div>
+                </div>
+                <p className="text-xs text-[#8C8C8C] leading-relaxed">
+                  Se detectaron cambios en la barra <strong className="text-[#E5E5E5] font-mono">{editingBar.code}</strong>. ¿Desea guardar las siguientes modificaciones?
+                </p>
+                <div className="bg-black border border-neutral-800/40 rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-3 gap-0 text-[9px] font-mono uppercase tracking-wider">
+                    <div className="px-3 py-2 text-[#8C8C8C] border-b border-neutral-800/40">Campo</div>
+                    <div className="px-3 py-2 text-[#8C8C8C] border-b border-neutral-800/40">Antes</div>
+                    <div className="px-3 py-2 text-[#8C8C8C] border-b border-neutral-800/40">Ahora</div>
+                    {editingBar.grossWeight !== parseFloat(editGrossWeight) && (
+                      <>
+                        <div className="px-3 py-2 text-[#E5E5E5] border-b border-neutral-800/20">Peso Bruto</div>
+                        <div className="px-3 py-2 text-[#8C8C8C] border-b border-neutral-800/20">{editingBar.grossWeight.toFixed(2)} g</div>
+                        <div className="px-3 py-2 text-[#D5B042] font-bold border-b border-neutral-800/20">{parseFloat(editGrossWeight).toFixed(2)} g</div>
+                      </>
+                    )}
+                    {editingBar.ley !== parseFloat(editLey) && (
+                      <>
+                        <div className="px-3 py-2 text-[#E5E5E5] border-b border-neutral-800/20">Ley Au</div>
+                        <div className="px-3 py-2 text-[#8C8C8C] border-b border-neutral-800/20">{editingBar.ley}‰</div>
+                        <div className="px-3 py-2 text-[#D5B042] font-bold border-b border-neutral-800/20">{parseFloat(editLey)}‰</div>
+                      </>
+                    )}
+                    {(editingBar.leyAg || 0) !== parseFloat(editLeyAg) && (
+                      <>
+                        <div className="px-3 py-2 text-[#E5E5E5]">Ley Ag</div>
+                        <div className="px-3 py-2 text-[#8C8C8C]">{editingBar.leyAg || 0}‰</div>
+                        <div className="px-3 py-2 text-[#D5B042] font-bold">{parseFloat(editLeyAg)}‰</div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="px-5 py-3 bg-black/20 border-t border-neutral-800/20 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmSaveChanges(false)}
+                  className="flex-1 py-2 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmSaveEdit}
+                  className="flex-1 py-2 bg-gradient-to-r from-[#A65B17] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider hover:brightness-110 transition-all duration-200 rounded-xl cursor-pointer shadow-[0_4px_12px_rgba(166,91,23,0.3)] flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4 text-black" />
+                  Guardar Cambios
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedBar && (
+          <motion.div
+            key="bar-detail-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="bg-[#1C1C1C] border border-neutral-800/40 rounded-2xl w-full max-w-sm overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.8)]"
+            >
+              <div className="px-5 py-3 bg-gradient-to-b from-black/40 to-transparent border-b border-neutral-800/20 flex justify-between items-center">
+                <div>
+                  <span className="text-[9px] font-mono text-[#A65B17] bg-[#A65B17]/10 border border-[#A65B17]/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                    Detalle de Barra
+                  </span>
+                  <h3 className="text-sm font-sans font-bold text-[#E5E5E5] mt-1 tracking-wide">
+                    {selectedBar.code}
+                  </h3>
+                  <p className="text-[10px] text-[#8C8C8C] mt-0.5">
+                    {suppliers.find(s => s.id === selectedBar.supplierId)?.name || 'N/A'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedBar(null)}
+                  className="text-[#8C8C8C] hover:text-[#E5E5E5] bg-black p-1.5 rounded-lg border border-neutral-800/40 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-3">
+                <div className="w-full h-40 rounded-xl overflow-hidden border border-neutral-800/40 flex items-center justify-center"
+                  style={{
+                    background: 'linear-gradient(135deg, #7E6611 0%, #D5B042 25%, #F5E6A3 45%, #D5B042 55%, #B4941E 75%, #7E6611 100%)',
+                  }}
+                >
+                  <div className="text-center space-y-1">
+                    <div className="w-20 h-6 mx-auto rounded-sm border border-black/20"
+                      style={{
+                        background: 'linear-gradient(180deg, #F5E6A3 0%, #D5B042 50%, #B4941E 100%)',
+                      }}
+                    />
+                    <span className="text-[9px] font-mono text-black/60 font-bold tracking-widest">GOLD BAR</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-black border border-neutral-800/40 rounded-lg p-3 space-y-0.5">
+                    <span className="text-[9px] font-mono text-[#8C8C8C] uppercase">Peso Bruto</span>
+                    <span className="text-sm font-sans font-bold text-[#E5E5E5]">{selectedBar.grossWeight.toLocaleString()} g</span>
+                  </div>
+                  <div className="bg-black border border-neutral-800/40 rounded-lg p-3 space-y-0.5">
+                    <span className="text-[9px] font-mono text-[#8C8C8C] uppercase">Fino Au</span>
+                    <span className="text-sm font-sans font-bold text-[#D5B042]">{selectedBar.analytical.toLocaleString()} g</span>
+                  </div>
+                  <div className="bg-black border border-neutral-800/40 rounded-lg p-3 space-y-0.5">
+                    <span className="text-[9px] font-mono text-[#8C8C8C] uppercase">Ley Au</span>
+                    <span className="text-sm font-sans font-bold text-[#E5E5E5]">{selectedBar.ley}‰</span>
+                  </div>
+                  <div className="bg-black border border-neutral-800/40 rounded-lg p-3 space-y-0.5">
+                    <span className="text-[9px] font-mono text-[#8C8C8C] uppercase">Ley Ag</span>
+                    <span className="text-sm font-sans font-bold text-[#E5E5E5]">{selectedBar.leyAg || 0}‰</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between bg-black border border-neutral-800/40 rounded-lg px-3 py-2">
+                  <span className="text-[9px] font-mono text-[#8C8C8C] uppercase">Verificación</span>
+                  <span className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-mono font-semibold
+                    ${selectedBar.verificationStatus === 'POR_VERIFICAR' ? 'bg-red-900/20 text-red-400 border border-red-500/10' :
+                      'bg-[#152B1E] text-emerald-400 border border-emerald-500/10'}`}
+                  >
+                    {selectedBar.verificationStatus === 'POR_VERIFICAR' ? 'POR VERIFICAR' : 'VERIFICADO'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="px-5 py-3 bg-black/20 border-t border-neutral-800/20">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBar(null)}
+                  className="w-full py-2 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
               </div>
             </motion.div>
           </motion.div>
