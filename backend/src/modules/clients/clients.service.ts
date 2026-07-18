@@ -5,6 +5,10 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeRif(raw: string): string {
+    return `J${raw}`;
+  }
+
   async findAll() {
     return this.prisma.client.findMany({ orderBy: { name: 'asc' } });
   }
@@ -15,21 +19,27 @@ export class ClientsService {
     return client;
   }
 
-  async create(data: { rif: string; name: string }) {
-    const existing = await this.prisma.client.findUnique({ where: { rif: data.rif } });
+  async create(data: { rif: string; name: string; contactInfo?: string }) {
+    const normalizedRif = this.normalizeRif(data.rif);
+
+    const existing = await this.prisma.client.findUnique({ where: { rif: normalizedRif } });
     if (existing) throw new BadRequestException('El RIF ya existe');
 
     return this.prisma.client.create({
-      data: { rif: data.rif, name: data.name.toUpperCase() },
+      data: { rif: normalizedRif, name: data.name.toUpperCase(), contactInfo: data.contactInfo },
     });
   }
 
-  async update(id: string, data: { rif?: string; name?: string }) {
+  async update(id: string, data: { rif?: string; name?: string; contactInfo?: string }) {
     const client = await this.findOne(id);
 
-    if (data.rif && data.rif !== client.rif) {
-      const existing = await this.prisma.client.findUnique({ where: { rif: data.rif } });
-      if (existing) throw new BadRequestException('El RIF ya existe');
+    if (data.rif) {
+      const normalizedRif = this.normalizeRif(data.rif);
+      if (normalizedRif !== client.rif) {
+        const existing = await this.prisma.client.findUnique({ where: { rif: normalizedRif } });
+        if (existing) throw new BadRequestException('El RIF ya existe');
+      }
+      data.rif = normalizedRif;
     }
 
     return this.prisma.client.update({
@@ -37,6 +47,7 @@ export class ClientsService {
       data: {
         ...(data.rif && { rif: data.rif }),
         ...(data.name && { name: data.name.toUpperCase() }),
+        ...(data.contactInfo !== undefined && { contactInfo: data.contactInfo }),
       },
     });
   }
@@ -44,12 +55,12 @@ export class ClientsService {
   async remove(id: string) {
     await this.findOne(id);
 
-    const barsInStock = await this.prisma.bar.count({
-      where: { clientId: id, status: 'IN_STOCK' },
+    const barsCount = await this.prisma.bar.count({
+      where: { clientId: id },
     });
-    if (barsInStock > 0) {
+    if (barsCount > 0) {
       throw new BadRequestException(
-        'No se puede eliminar: el cliente tiene barras en bóveda',
+        'No se puede eliminar: el cliente tiene barras registradas en el historial',
       );
     }
 
@@ -59,14 +70,14 @@ export class ClientsService {
   async balance(id: string) {
     const client = await this.findOne(id);
 
-    const [barsResult, exitsResult, inStockResult] = await Promise.all([
+    const [barsResult, exitedBarsResult, inStockResult] = await Promise.all([
       this.prisma.bar.aggregate({
         where: { clientId: id },
         _sum: { fineWeight: true },
       }),
-      this.prisma.exitDetail.aggregate({
-        where: { clientId: id },
-        _sum: { weightAported: true },
+      this.prisma.bar.aggregate({
+        where: { clientId: id, status: 'EXITED' },
+        _sum: { fineWeight: true },
       }),
       this.prisma.bar.aggregate({
         where: { clientId: id, status: 'IN_STOCK' },
@@ -75,7 +86,7 @@ export class ClientsService {
     ]);
 
     const totalReceived = Number(barsResult._sum.fineWeight ?? 0);
-    const totalExited = Number(exitsResult._sum.weightAported ?? 0);
+    const totalExited = Number(exitedBarsResult._sum.fineWeight ?? 0);
     const inStock = Number(inStockResult._sum.fineWeight ?? 0);
 
     return {

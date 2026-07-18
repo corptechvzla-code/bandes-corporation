@@ -10,14 +10,14 @@ export class ReportsService {
     const client = await this.prisma.client.findUnique({ where: { id: clientId } });
     if (!client) throw new NotFoundException('Client not found');
 
-    const [barsAgg, exitsAgg, bars] = await Promise.all([
+    const [receivedAgg, exitedAgg, bars] = await Promise.all([
       this.prisma.bar.aggregate({
-        where: { clientId, status: 'IN_STOCK' },
+        where: { clientId },
         _sum: { fineWeight: true },
       }),
-      this.prisma.exitDetail.aggregate({
-        where: { clientId },
-        _sum: { weightAported: true },
+      this.prisma.bar.aggregate({
+        where: { clientId, status: 'EXITED' },
+        _sum: { fineWeight: true },
       }),
       this.prisma.bar.findMany({
         where: { clientId },
@@ -25,17 +25,17 @@ export class ReportsService {
       }),
     ]);
 
-    const totalIn = Number(barsAgg._sum.fineWeight ?? 0);
-    const totalOut = Number(exitsAgg._sum.weightAported ?? 0);
-    const balance = totalIn - totalOut;
+    const totalReceived = Number(receivedAgg._sum.fineWeight ?? 0);
+    const totalExited = Number(exitedAgg._sum.fineWeight ?? 0);
+    const balance = totalReceived - totalExited;
 
     return this.generatePdf((doc) => {
       doc.fontSize(20).text('Gold Command Center', { align: 'center' });
       doc.fontSize(16).text(`Reporte de Cliente: ${client.name}`, { align: 'center' });
       doc.moveDown(2);
 
-      doc.fontSize(12).text(`Peso recibido total: ${totalIn.toFixed(4)} kg`);
-      doc.text(`Peso entregado total: ${totalOut.toFixed(4)} kg`);
+      doc.fontSize(12).text(`Peso recibido total: ${totalReceived.toFixed(4)} kg`);
+      doc.text(`Peso entregado total: ${totalExited.toFixed(4)} kg`);
       doc.text(`Saldo actual: ${balance.toFixed(4)} kg`);
       doc.moveDown();
 
@@ -44,7 +44,7 @@ export class ReportsService {
         doc.fontSize(10).text(
           `#${bar.barNumber} — Bruto: ${Number(bar.grossWeight).toFixed(4)} kg, ` +
           `Fineza: ${Number(bar.purity).toFixed(2)}‰, ` +
-          `Peso Fino: ${Number(bar.fineWeight).toFixed(4)} kg — ${bar.status}`,
+          `FA: ${Number(bar.fineWeight).toFixed(4)} kg — ${bar.status}`,
         );
       }
     });
@@ -55,7 +55,13 @@ export class ReportsService {
       include: {
         exitDetails: {
           include: {
-            client: { select: { name: true } },
+            lot: {
+              include: {
+                process: {
+                  include: { client: { select: { name: true } } },
+                },
+              },
+            },
             bars: { select: { barNumber: true } },
           },
         },
@@ -76,8 +82,9 @@ export class ReportsService {
         doc.moveDown(0.5);
 
         for (const detail of exit.exitDetails) {
+          const clientName = detail.lot?.process?.client?.name ?? 'N/A';
           doc.text(
-            `  → ${detail.client.name}: ${Number(detail.weightAported).toFixed(4)} kg ` +
+            `  → ${clientName}: ${Number(detail.weightAported).toFixed(4)} kg ` +
             `— Barras: [${detail.bars.map((b) => `#${b.barNumber}`).join(', ')}]`,
           );
         }

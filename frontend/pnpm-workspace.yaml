@@ -1,0 +1,6 @@
+allowBuilds:
+  '@google/genai': false
+  core-js: false
+  esbuild: false
+  protobufjs: false
+  sharp: false

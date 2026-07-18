@@ -5,73 +5,61 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 export class MaterialExitsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: { destination: string; contributions: { clientId: string; weightAported: number }[] }) {
-    if (!data.contributions?.length) {
-      throw new BadRequestException('At least one contribution is required');
+  async create(data: { destination: string; lotIds: string[] }) {
+    if (!data.lotIds?.length) {
+      throw new BadRequestException('Al menos un lote es requerido');
     }
 
-    const totalWeight = data.contributions.reduce((sum, c) => sum + c.weightAported, 0);
-
     return this.prisma.$transaction(async (tx) => {
-      const exit = await tx.materialExit.create({
-        data: {
-          destination: data.destination,
-          totalWeight,
+      const lots = await tx.lot.findMany({
+        where: { id: { in: data.lotIds } },
+        include: {
+          process: { select: { status: true, clientId: true } },
+          bars: { where: { status: { in: ['IN_STOCK', 'COMPLETADO'] } } },
         },
       });
 
-      for (const contribution of data.contributions) {
+      if (lots.length !== data.lotIds.length) {
+        throw new BadRequestException('Uno o más lotes no existen');
+      }
+
+      for (const lot of lots) {
+        if (lot.process.status !== 'CLOSED') {
+          throw new BadRequestException(
+            `El lote ${lot.name} pertenece a un proceso no cerrado`,
+          );
+        }
+        if (lot.bars.length === 0) {
+          throw new BadRequestException(
+            `El lote ${lot.name} no tiene barras disponibles para egresar`,
+          );
+        }
+      }
+
+      const totalWeight = lots.reduce(
+        (sum, lot) => sum + lot.bars.reduce((s, b) => s + Number(b.fineWeight), 0),
+        0,
+      );
+
+      const exit = await tx.materialExit.create({
+        data: { destination: data.destination, totalWeight },
+      });
+
+      for (const lot of lots) {
+        const lotWeight = lot.bars.reduce((s, b) => s + Number(b.fineWeight), 0);
+
         const detail = await tx.exitDetail.create({
           data: {
             exitId: exit.id,
-            clientId: contribution.clientId,
-            weightAported: contribution.weightAported,
+            lotId: lot.id,
+            weightAported: lotWeight,
           },
         });
 
-        const bars = await tx.bar.findMany({
-          where: {
-            clientId: contribution.clientId,
-            status: 'IN_STOCK',
-          },
-          orderBy: { createdAt: 'asc' },
+        await tx.bar.updateMany({
+          where: { id: { in: lot.bars.map((b) => b.id) } },
+          data: { status: 'EXITED', exitDetailId: detail.id },
         });
-
-        let remaining = contribution.weightAported;
-        const affectedBarIds: string[] = [];
-
-        for (const bar of bars) {
-          if (remaining <= 0) break;
-          const barValue = Number(bar.fineWeight);
-
-          if (barValue <= remaining) {
-            await tx.bar.update({
-              where: { id: bar.id },
-              data: { status: 'EXITED', exitDetailId: detail.id },
-            });
-            affectedBarIds.push(bar.id);
-            remaining -= barValue;
-          } else {
-            // Partial consumption of a bar's fine weight — for gold
-            // the physical bar cannot be split, so we conceptually mark it
-            // as fully consumed when any portion is used (standard gold
-            // inventory practice: bars are indivisible).
-            await tx.bar.update({
-              where: { id: bar.id },
-              data: { status: 'EXITED', exitDetailId: detail.id },
-            });
-            affectedBarIds.push(bar.id);
-            remaining = 0;
-          }
-        }
-
-        if (remaining > 0) {
-          throw new BadRequestException(
-            `Insufficient funds for client ${contribution.clientId}. ` +
-            `Requested: ${contribution.weightAported}, ` +
-            `Available: ${Number(contribution.weightAported) - Number(remaining)}`,
-          );
-        }
       }
 
       return tx.materialExit.findUnique({
@@ -79,8 +67,14 @@ export class MaterialExitsService {
         include: {
           exitDetails: {
             include: {
-              client: { select: { id: true, name: true } },
-              bars: { select: { id: true, barNumber: true } },
+              lot: {
+                include: {
+                  process: {
+                    include: { client: { select: { id: true, name: true } } },
+                  },
+                },
+              },
+              bars: { select: { id: true, barNumber: true, fineWeight: true } },
             },
           },
         },
@@ -93,8 +87,14 @@ export class MaterialExitsService {
       include: {
         exitDetails: {
           include: {
-            client: { select: { id: true, name: true } },
-            bars: { select: { barNumber: true } },
+            lot: {
+              include: {
+                process: {
+                  include: { client: { select: { id: true, name: true } } },
+                },
+              },
+            },
+            bars: { select: { barNumber: true, fineWeight: true } },
           },
         },
       },
@@ -108,7 +108,13 @@ export class MaterialExitsService {
       include: {
         exitDetails: {
           include: {
-            client: { select: { id: true, name: true } },
+            lot: {
+              include: {
+                process: {
+                  include: { client: { select: { id: true, name: true } } },
+                },
+              },
+            },
             bars: { select: { barNumber: true, fineWeight: true } },
           },
         },

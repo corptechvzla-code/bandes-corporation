@@ -2,106 +2,96 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { useGoldTraceability } from '../../src/context/GoldTraceabilityContext';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import {
-  FileText,
-  Download,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Sparkles,
-  Scale,
-  CheckCircle2,
-  Clock,
-  RefreshCw,
-  Info,
-  Flame,
-  TrendingUp,
-  Coins
+  FileText, Download, ArrowDownLeft, ArrowUpRight,
+  Sparkles, Scale, CheckCircle2, Clock, RefreshCw, Info,
+  Flame, TrendingUp, Coins,
 } from 'lucide-react';
+import { useBars } from '@/hooks/useBars';
+import { useClients } from '@/hooks/useClients';
+import { useProcesses } from '@/hooks/useProcesses';
+import { useLots } from '@/hooks/useLots';
+import { useMaterialExits } from '@/hooks/useExits';
+import { formatNumber } from '@/lib/format';
 
 export default function ReportesPage() {
-  const { goldBars, castingLots, transactions, suppliers } = useGoldTraceability();
+  const { data: bars = [] } = useBars();
+  const { data: clients = [] } = useClients();
+  const { data: processes = [] } = useProcesses();
+  const { data: lots = [] } = useLots();
+  const { data: exits = [] } = useMaterialExits();
   const [exportingSection, setExportingSection] = useState<string | null>(null);
 
   const oroRecibido = useMemo(() => {
-    const totalBarras = goldBars.length;
-    const pesoBruto = goldBars.reduce((sum, b) => sum + b.grossWeight, 0);
-    const finoTotal = goldBars.reduce((sum, b) => sum + b.expected, 0);
-    const proveedores = new Set(goldBars.map(b => b.supplierId)).size;
-    return { totalBarras, pesoBruto, finoTotal, proveedores };
-  }, [goldBars]);
+    const totalBarras = bars.length;
+    const pesoBruto = bars.reduce((sum, b) => sum + b.grossWeight, 0);
+    const finoTotal = bars.reduce((sum, b) => sum + b.fineWeight, 0);
+    const clientes = new Set(bars.map(b => b.clientId)).size;
+    return { totalBarras, pesoBruto, finoTotal, clientes };
+  }, [bars]);
 
   const oroRefinado = useMemo(() => {
-    const lots = castingLots.filter(l => l.status === 'COMPLETADO');
-    const completedBars = goldBars.filter(b => b.status === 'COMPLETADO' || b.status === 'EGRESADO');
-    const totalRecovered = completedBars.reduce((sum, b) => sum + (b.recovered || 0), 0);
-    const totalExpected = completedBars.reduce((sum, b) => sum + b.expected, 0);
+    const closedLots = lots.filter(l => l.recovered != null);
+    const completedBars = bars.filter(b => b.status === 'COMPLETADO' || b.status === 'EXITED');
+    const totalRecovered = closedLots.reduce((sum, l) => sum + (l.recovered || 0), 0);
+    const completedLotIds = new Set(closedLots.map(l => l.id));
+    const completedLotsBars = bars.filter(b => b.lotId && completedLotIds.has(b.lotId));
+    const totalExpected = completedLotsBars.reduce((sum, b) => sum + b.fineWeight, 0);
     const eficiencia = totalExpected > 0 ? (totalRecovered / totalExpected) * 100 : 0;
-    const enProceso = castingLots.filter(l => l.status === 'FUNDICION' || l.status === 'ENFRIANDO');
+    const enProceso = processes.filter(p => p.status === 'OPEN');
     return {
-      lotsCount: lots.length,
+      lotsCount: closedLots.length,
       enProcesoCount: enProceso.length,
       barrasCount: completedBars.length,
       totalRecovered,
       totalExpected,
-      eficiencia
+      eficiencia,
     };
-  }, [goldBars, castingLots]);
+  }, [lots, bars, processes]);
 
   const oroEnEspera = useMemo(() => {
-    const waiting = goldBars.filter(b => b.status === 'INGRESADO');
+    const waiting = bars.filter(b => b.status === 'IN_STOCK');
     const pesoBruto = waiting.reduce((sum, b) => sum + b.grossWeight, 0);
-    const finoTotal = waiting.reduce((sum, b) => sum + b.expected, 0);
-    const proveedores = new Set(waiting.map(b => b.supplierId)).size;
-    return { count: waiting.length, pesoBruto, finoTotal, proveedores };
-  }, [goldBars]);
+    const finoTotal = waiting.reduce((sum, b) => sum + b.fineWeight, 0);
+    const clientes = new Set(waiting.map(b => b.clientId)).size;
+    return { count: waiting.length, pesoBruto, finoTotal, clientes };
+  }, [bars]);
 
   const clientesReport = useMemo(() => {
     const map = new Map<string, { name: string; received: number; delivered: number }>();
-    transactions.forEach(tx => {
-      const entry = map.get(tx.clientId) || { name: tx.clientName, received: 0, delivered: 0 };
-      if (tx.type === 'IN') entry.received += tx.weight;
-      else entry.delivered += tx.weight;
-      map.set(tx.clientId, entry);
+    bars.forEach(b => {
+      const clientName = clients.find(c => c.id === b.clientId)?.name || 'Desconocido';
+      const entry = map.get(b.clientId) || { name: clientName, received: 0, delivered: 0 };
+      entry.received += b.fineWeight;
+      if (b.status === 'EXITED') entry.delivered += b.fineWeight;
+      map.set(b.clientId, entry);
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [transactions]);
+  }, [bars, clients]);
 
   const handleExportPDF = useCallback(async (elementId: string, title: string) => {
     setExportingSection(elementId);
-
     try {
       const element = document.getElementById(elementId);
       if (!element) return;
-
-      const imgData = await toPng(element, {
-        backgroundColor: '#1C1C1C',
-        pixelRatio: 2,
-      });
-
+      const imgData = await toPng(element, { backgroundColor: '#1C1C1C', pixelRatio: 2 });
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = 190;
-
       const img = new Image();
       img.src = imgData;
       await img.decode();
-
       const pdfHeight = (img.naturalHeight * pdfWidth) / img.naturalWidth;
-
       let heightLeft = pdfHeight;
       let position = 10;
-
       pdf.addImage(imgData, 'PNG', 10, position, pdfWidth, pdfHeight);
-
       while (heightLeft > 270) {
         position = heightLeft - 270;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 10, -position + 10, pdfWidth, pdfHeight);
         heightLeft -= 270;
       }
-
       pdf.save(`${title.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error('Error al generar PDF:', err);
@@ -111,29 +101,18 @@ export default function ReportesPage() {
   }, []);
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }} 
-      animate={{ opacity: 1 }} 
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
-    >
-
-      <motion.div 
-        initial={{ opacity: 0, y: -10 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-      >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: 'easeOut' }}>
         <h1 className="text-2xl md:text-3xl font-sans font-medium text-[#E5E5E5] tracking-tight flex items-center gap-2">
           <FileText className="w-8 h-8 text-[#D5B042] filter drop-shadow-[0_0_8px_rgba(213,176,66,0.3)]" />
-          Reportes de <span className="text-[#D5B042] font-semibold">Trazabilidad</span>
+          Reportes de <span className="text-[#D5B042] font-semibold">Fundición</span>
         </h1>
         <p className="text-xs text-[#8C8C8C] mt-1">
-          Conciliación metalúrgica — Oro recibido, refinado, en espera y balances por cliente.
+          Conciliación metalúrgica — Oro recibido, fundido, en espera y balances por cliente.
         </p>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
         <motion.div
           initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
@@ -178,12 +157,12 @@ export default function ReportesPage() {
               <span className="text-[9px] text-[#8C8C8C]/50 block">Barras</span>
             </div>
             <div>
-              <span className="text-xs font-mono font-bold text-[#D5B042]">{oroRecibido.proveedores}</span>
+              <span className="text-xs font-mono font-bold text-[#D5B042]">{oroRecibido.clientes}</span>
               <span className="text-[9px] text-[#8C8C8C]/50 block">Clientes</span>
             </div>
             <div className="col-span-2">
               <span className="text-[10px] font-mono text-[#8C8C8C]">
-                Fino esperado:{' '}
+                Fino total:{' '}
                 <strong className="text-[#E5E5E5]">{(oroRecibido.finoTotal / 1000).toFixed(3)} kg Au</strong>
               </span>
             </div>
@@ -194,7 +173,7 @@ export default function ReportesPage() {
           initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35, duration: 0.4, ease: 'easeOut' }}
-          id="report-oro-refinado"
+          id="report-oro-fundido"
           className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] space-y-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-amber-500/30"
         >
           <div className="flex items-center justify-between">
@@ -203,16 +182,16 @@ export default function ReportesPage() {
                 <Flame className="w-4 h-4 text-amber-400" />
               </div>
               <div>
-                <span className="text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider font-semibold">Oro Refinado</span>
+                <span className="text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider font-semibold">            Oro Fundido</span>
                 <p className="text-[9px] text-[#8C8C8C]/50">Fundiciones completadas</p>
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-refinado', 'Reporte_Oro_Refinado')}
-              disabled={exportingSection === 'report-oro-refinado'}
+              onClick={() => handleExportPDF('report-oro-fundido', 'Reporte_Oro_Fundido')}
+              disabled={exportingSection === 'report-oro-fundido'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-950/30 hover:bg-amber-900/50 border border-amber-500/20 text-amber-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
-              {exportingSection === 'report-oro-refinado' ? (
+              {exportingSection === 'report-oro-fundido' ? (
                 <RefreshCw className="w-3 h-3 animate-spin" />
               ) : (
                 <Download className="w-3 h-3" />
@@ -248,7 +227,7 @@ export default function ReportesPage() {
           {oroRefinado.enProcesoCount > 0 && (
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-500 bg-amber-950/20 px-2.5 py-1 rounded-lg border border-amber-500/10">
               <RefreshCw className="w-3 h-3 animate-spin" />
-              {oroRefinado.enProcesoCount} lote(s) en fundición activa
+              {oroRefinado.enProcesoCount} proceso(s) en fundición activa
             </div>
           )}
         </motion.div>
@@ -297,7 +276,7 @@ export default function ReportesPage() {
               <span className="text-[9px] text-[#8C8C8C]/50 block">Barras</span>
             </div>
             <div>
-              <span className="text-xs font-mono font-bold text-[#D5B042]">{oroEnEspera.proveedores}</span>
+              <span className="text-xs font-mono font-bold text-[#D5B042]">{oroEnEspera.clientes}</span>
               <span className="text-[9px] text-[#8C8C8C]/50 block">Clientes</span>
             </div>
             <div>
@@ -308,7 +287,6 @@ export default function ReportesPage() {
             </div>
           </div>
         </motion.div>
-
       </div>
 
       <motion.div
@@ -386,7 +364,6 @@ export default function ReportesPage() {
           </div>
         )}
       </motion.div>
-
     </motion.div>
   );
 }

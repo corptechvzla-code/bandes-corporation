@@ -2,10 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GoldTraceabilityProvider } from '../src/context/GoldTraceabilityContext';
 import { Sidebar } from '../src/components/Sidebar';
 import { Calendar } from 'lucide-react';
 import './globals.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 10_000,
+    },
+  },
+});
 
 export default function RootLayout({
   children,
@@ -40,56 +51,58 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
       <body>
-        <GoldTraceabilityProvider>
-          <div id="app-root" className="min-h-screen bg-[#141414] text-[#E5E5E5] font-sans flex overflow-hidden">
-            
-            <Sidebar />
-
-            <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <QueryClientProvider client={queryClient}>
+          <GoldTraceabilityProvider>
+            <div id="app-root" className="min-h-screen bg-[#141414] text-[#E5E5E5] font-sans flex overflow-hidden">
               
-              {activeTab === 'dashboard' && (
-                <header className="h-20 border-b border-neutral-800/40 bg-[#121212]/90 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-30">
-                  
-                  <div className="flex items-center gap-4">
-                    <div className="hidden sm:flex flex-col">
-                      <span className="text-[10px] font-mono text-[#8C8C8C] uppercase tracking-widest">
-                        Estación de Trabajo / Auditoría
-                      </span>
-                      <span className="text-sm font-semibold text-[#D5B042] uppercase tracking-wider flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#D5B042] animate-pulse"></span>
-                        {activeTab} Module
-                      </span>
-                    </div>
-                  </div>
+              <Sidebar />
 
-                  <div className="flex items-center gap-4">
-                    <div className="hidden lg:flex items-center gap-2 bg-black border border-neutral-800/40 px-3 py-1.5 rounded-full font-mono text-[11px] text-[#8C8C8C]">
-                      <Calendar className="w-3.5 h-3.5 text-[#D5B042]" />
-                      <span>2026-07-16</span>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 bg-black border border-neutral-800/40 pl-2.5 pr-4 py-1 rounded-full shadow-inner">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#8C6D1F] to-[#D5B042] flex items-center justify-center text-black font-bold text-xs">
-                        A
-                      </div>
-                      <div className="hidden sm:flex flex-col text-left">
-                        <span className="text-[11px] font-bold text-[#E5E5E5] leading-none">Administrador</span>
-                        <span className="text-[9px] text-[#8C8C8C] font-mono mt-0.5 leading-none">Owner</span>
+              <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden lg:ml-16">
+                
+                {activeTab === 'dashboard' && (
+                  <header className="h-20 border-b border-neutral-800/40 bg-[#121212]/90 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-30">
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="hidden sm:flex flex-col">
+                        <span className="text-[10px] font-mono text-[#8C8C8C] uppercase tracking-widest">
+                          Estación de Trabajo / Auditoría
+                        </span>
+                        <span className="text-sm font-semibold text-[#D5B042] uppercase tracking-wider flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#D5B042] animate-pulse"></span>
+                          {activeTab} Module
+                        </span>
                       </div>
                     </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="hidden lg:flex items-center gap-2 bg-black border border-neutral-800/40 px-3 py-1.5 rounded-full font-mono text-[11px] text-[#8C8C8C]">
+                        <Calendar className="w-3.5 h-3.5 text-[#D5B042]" />
+                        <span>2026-07-16</span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 bg-black border border-neutral-800/40 pl-2.5 pr-4 py-1 rounded-full shadow-inner">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#8C6D1F] to-[#D5B042] flex items-center justify-center text-black font-bold text-xs">
+                          A
+                        </div>
+                        <div className="hidden sm:flex flex-col text-left">
+                          <span className="text-[11px] font-bold text-[#E5E5E5] leading-none">Administrador</span>
+                          <span className="text-[9px] text-[#8C8C8C] font-mono mt-0.5 leading-none">Owner</span>
+                        </div>
+                      </div>
+                    </div>
+                  </header>
+                )}
+
+                <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#141414] relative">
+                  <div className="max-w-7xl mx-auto space-y-8">
+                    {children}
                   </div>
-                </header>
-              )}
+                </main>
 
-              <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#141414] relative">
-                <div className="max-w-7xl mx-auto space-y-8">
-                  {children}
-                </div>
-              </main>
-
+              </div>
             </div>
-          </div>
-        </GoldTraceabilityProvider>
+          </GoldTraceabilityProvider>
+        </QueryClientProvider>
       </body>
     </html>
   );

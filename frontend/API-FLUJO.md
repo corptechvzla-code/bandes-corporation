@@ -12,11 +12,12 @@ enum BarStatus { IN_STOCK, EXITED }
 enum ProcessStatus { OPEN, CLOSED }
 
 model Client {
-  id        String   @id @default(uuid())
-  rif       String   @unique
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  rif         String   @unique
+  name        String
+  contactInfo String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   bars        Bar[]
   exitDetails ExitDetail[]
   processes   Process[]
@@ -91,9 +92,9 @@ model ExitDetail {
 |--------|------|------|-----------|
 | `GET` | `/clients` | — | `Client[]` ordenados por name |
 | `GET` | `/clients/:id` | — | `Client` |
-| `POST` | `/clients` | `{ rif, name }` | `Client` creado (name → UPPERCASE) |
-| `PATCH` | `/clients/:id` | `{ rif?, name? }` | `Client` actualizado |
-| `DELETE` | `/clients/:id` | — | `Client` eliminado (solo si 0 IN_STOCK bars) |
+| `POST` | `/clients` | `{ rif, name, contactInfo? }` | `Client` creado (name → UPPERCASE) |
+| `PATCH` | `/clients/:id` | `{ rif?, name?, contactInfo? }` | `Client` actualizado |
+| `DELETE` | `/clients/:id` | — | `Client` eliminado (solo si 0 barras en historial) |
 | `GET` | `/clients/:id/balance` | — | `{ clientId, clientName, totalReceived, totalExited, inStock, currentBalance }` |
 
 ### Bars — `/bars`
@@ -250,6 +251,7 @@ interface Client {
   id: string;
   rif: string;
   name: string;
+  contactInfo?: string;
   createdAt: string;
   updatedAt: string;
 }

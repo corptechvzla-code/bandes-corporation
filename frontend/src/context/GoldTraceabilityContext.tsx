@@ -24,7 +24,7 @@ const INITIAL_SUPPLIERS: Supplier[] = [
   { id: 'SUP-03', name: 'Consorcio Metalúrgico Bolívar', code: 'CMB', location: 'Ciudad Guayana', status: 'ACTIVE' },
   { id: 'SUP-04', name: 'Metales Nobles del Sur', code: 'MNS', location: 'Arequipa, Chala', status: 'ACTIVE' },
   { id: 'SUP-05', name: 'Corporación Aurífera Caroní', code: 'CAC', location: 'Upata, Bolívar', status: 'ACTIVE' },
-  { id: 'SUP-06', name: 'Refinería Andina de Oro', code: 'RAO', location: 'Mérida, Andes', status: 'ACTIVE' },
+  { id: 'SUP-06', name: 'Centro de Fundición Andino', code: 'CFA', location: 'Mérida, Andes', status: 'ACTIVE' },
   { id: 'SUP-07', name: 'Auríferos de Yuruari', code: 'ADY', location: 'El Callao, Bolívar', status: 'ACTIVE' },
   { id: 'SUP-08', name: 'Preciosos de Guayana', code: 'PDG', location: 'Sifontes, Tumeremo', status: 'ACTIVE' },
 ];
@@ -427,7 +427,7 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
   {
     id: 'TX-304',
     type: 'IN',
-    clientName: 'Refinería Andina de Oro',
+    clientName: 'Centro de Fundición Andino',
     clientId: 'SUP-06',
     weight: 11600,
     barsCount: 2,
@@ -515,7 +515,7 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
   {
     id: 'TX-405',
     type: 'OUT',
-    clientName: 'Refinería Andina de Oro',
+    clientName: 'Centro de Fundición Andino',
     clientId: 'SUP-06',
     weight: 6000.0,
     barsCount: 0,

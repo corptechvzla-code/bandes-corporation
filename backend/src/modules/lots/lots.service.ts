@@ -28,10 +28,41 @@ export class LotsService {
     });
   }
 
-  async create(data: { name: string; processId: string }) {
+  async create(data: {
+    name: string;
+    processId: string;
+    operator?: string;
+    castingTemp?: number;
+    moldCode?: string;
+  }) {
     return this.prisma.lot.create({
       data,
       include: { process: true },
+    });
+  }
+
+  async update(
+    id: string,
+    data: {
+      name?: string;
+      operator?: string;
+      castingTemp?: number;
+      moldCode?: string;
+      recovered?: number | null;
+      recoveryAt?: string | null;
+    },
+  ) {
+    const lot = await this.findOne(id);
+    return this.prisma.lot.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(data.recoveryAt ? { recoveryAt: new Date(data.recoveryAt) } : {}),
+      },
+      include: {
+        process: { include: { client: { select: { id: true, name: true } } } },
+        bars: true,
+      },
     });
   }
 }
