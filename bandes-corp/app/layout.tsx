@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const activeTab = pathname.replace('/', '') || 'dashboard';
+  const activeTab = pathname.replace('/', '');
   const [systemTime, setSystemTime] = useState<string>('');
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        <title>Bandes Corp - Trazabilidad de Oro</title>
+        <title>Control Mining - Trazabilidad de Oro</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
       <body>
@@ -52,12 +52,9 @@ export default function RootLayout({
                   
                   <div className="flex items-center gap-4">
                     <div className="hidden sm:flex flex-col">
-                      <span className="text-[10px] font-mono text-[#8C8C8C] uppercase tracking-widest">
-                        Estación de Trabajo / Auditoría
-                      </span>
                       <span className="text-sm font-semibold text-[#D5B042] uppercase tracking-wider flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#D5B042] animate-pulse"></span>
-                        {activeTab} Module
+                        Bienvenido, Administrador
                       </span>
                     </div>
                   </div>
