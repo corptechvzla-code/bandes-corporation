@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useGoldTraceability } from '../../src/context/GoldTraceabilityContext';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
@@ -10,32 +10,59 @@ import {
   Download,
   ArrowDownLeft,
   ArrowUpRight,
-  Sparkles,
-  Scale,
-  CheckCircle2,
   Clock,
   RefreshCw,
-  Info,
   Flame,
   TrendingUp,
-  Coins
+  Coins,
+  Filter,
+  X,
+  Check
 } from 'lucide-react';
+
+const REPORT_CONFIG: Record<string, { title: string; fileName: string; filterType: 'suppliers' | 'clients'; accent: string }> = {
+  'report-oro-recibido': { title: 'Oro Recibido', fileName: 'Reporte_Oro_Recibido', filterType: 'suppliers', accent: 'emerald' },
+  'report-oro-refinado': { title: 'Oro Refinado', fileName: 'Reporte_Oro_Refinado', filterType: 'suppliers', accent: 'amber' },
+  'report-oro-espera': { title: 'Oro en Espera', fileName: 'Reporte_Oro_Espera', filterType: 'suppliers', accent: 'blue' },
+  'report-clientes': { title: 'Balance por Cliente', fileName: 'Reporte_Balance_Clientes', filterType: 'clients', accent: 'gold' },
+};
 
 export default function ReportesPage() {
   const { goldBars, castingLots, transactions, suppliers } = useGoldTraceability();
   const [exportingSection, setExportingSection] = useState<string | null>(null);
 
+  const [filterModalFor, setFilterModalFor] = useState<string | null>(null);
+  const [modalDateFrom, setModalDateFrom] = useState('');
+  const [modalDateTo, setModalDateTo] = useState('');
+  const [modalSelectedIds, setModalSelectedIds] = useState<string[]>([]);
+
+  const [exportFilters, setExportFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    supplierIds: [] as string[],
+    clientIds: [] as string[],
+  });
+
+  const filteredBars = useMemo(() => {
+    return goldBars.filter(b => {
+      if (exportFilters.dateFrom && b.createdAt < exportFilters.dateFrom) return false;
+      if (exportFilters.dateTo && b.createdAt > exportFilters.dateTo + 'T23:59:59') return false;
+      if (exportFilters.supplierIds.length > 0 && !exportFilters.supplierIds.includes(b.supplierId)) return false;
+      return true;
+    });
+  }, [goldBars, exportFilters]);
+
   const oroRecibido = useMemo(() => {
-    const totalBarras = goldBars.length;
-    const pesoBruto = goldBars.reduce((sum, b) => sum + b.grossWeight, 0);
-    const finoTotal = goldBars.reduce((sum, b) => sum + b.expected, 0);
-    const proveedores = new Set(goldBars.map(b => b.supplierId)).size;
+    const totalBarras = filteredBars.length;
+    const pesoBruto = filteredBars.reduce((sum, b) => sum + b.grossWeight, 0);
+    const finoTotal = filteredBars.reduce((sum, b) => sum + b.expected, 0);
+    const proveedores = new Set(filteredBars.map(b => b.supplierId)).size;
     return { totalBarras, pesoBruto, finoTotal, proveedores };
-  }, [goldBars]);
+  }, [filteredBars]);
 
   const oroRefinado = useMemo(() => {
+    const completedBars = filteredBars.filter(b => b.status === 'COMPLETADO' || b.status === 'EGRESADO');
     const lots = castingLots.filter(l => l.status === 'COMPLETADO');
-    const completedBars = goldBars.filter(b => b.status === 'COMPLETADO' || b.status === 'EGRESADO');
     const totalRecovered = completedBars.reduce((sum, b) => sum + (b.recovered || 0), 0);
     const totalExpected = completedBars.reduce((sum, b) => sum + b.expected, 0);
     const eficiencia = totalExpected > 0 ? (totalRecovered / totalExpected) * 100 : 0;
@@ -48,60 +75,57 @@ export default function ReportesPage() {
       totalExpected,
       eficiencia
     };
-  }, [goldBars, castingLots]);
+  }, [filteredBars, castingLots]);
 
   const oroEnEspera = useMemo(() => {
-    const waiting = goldBars.filter(b => b.status === 'INGRESADO');
+    const waiting = filteredBars.filter(b => b.status === 'CONFIRMADO' || b.status === 'POR_CONFIRMAR');
     const pesoBruto = waiting.reduce((sum, b) => sum + b.grossWeight, 0);
     const finoTotal = waiting.reduce((sum, b) => sum + b.expected, 0);
     const proveedores = new Set(waiting.map(b => b.supplierId)).size;
     return { count: waiting.length, pesoBruto, finoTotal, proveedores };
-  }, [goldBars]);
+  }, [filteredBars]);
 
   const clientesReport = useMemo(() => {
+    const filtered = transactions.filter(tx => {
+      if (exportFilters.dateFrom && tx.date < exportFilters.dateFrom) return false;
+      if (exportFilters.dateTo && tx.date > exportFilters.dateTo + 'T23:59:59') return false;
+      if (exportFilters.clientIds.length > 0 && !exportFilters.clientIds.includes(tx.clientId)) return false;
+      return true;
+    });
     const map = new Map<string, { name: string; received: number; delivered: number }>();
-    transactions.forEach(tx => {
+    filtered.forEach(tx => {
       const entry = map.get(tx.clientId) || { name: tx.clientName, received: 0, delivered: 0 };
       if (tx.type === 'IN') entry.received += tx.weight;
       else entry.delivered += tx.weight;
       map.set(tx.clientId, entry);
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [transactions]);
+  }, [transactions, exportFilters]);
 
   const handleExportPDF = useCallback(async (elementId: string, title: string) => {
     setExportingSection(elementId);
-
     try {
       const element = document.getElementById(elementId);
       if (!element) return;
-
       const imgData = await toPng(element, {
         backgroundColor: '#1C1C1C',
         pixelRatio: 2,
       });
-
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = 190;
-
       const img = new Image();
       img.src = imgData;
       await img.decode();
-
       const pdfHeight = (img.naturalHeight * pdfWidth) / img.naturalWidth;
-
       let heightLeft = pdfHeight;
       let position = 10;
-
       pdf.addImage(imgData, 'PNG', 10, position, pdfWidth, pdfHeight);
-
       while (heightLeft > 270) {
         position = heightLeft - 270;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 10, -position + 10, pdfWidth, pdfHeight);
         heightLeft -= 270;
       }
-
       pdf.save(`${title.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error('Error al generar PDF:', err);
@@ -109,6 +133,61 @@ export default function ReportesPage() {
       setExportingSection(null);
     }
   }, []);
+
+  const openFilterModal = (reportId: string) => {
+    setModalDateFrom('');
+    setModalDateTo('');
+    setModalSelectedIds([]);
+    setFilterModalFor(reportId);
+  };
+
+  const handleExportWithFilters = () => {
+    if (!filterModalFor) return;
+    const config = REPORT_CONFIG[filterModalFor];
+    const elementId = filterModalFor;
+    const fileName = config.fileName;
+
+    setExportFilters({
+      dateFrom: modalDateFrom,
+      dateTo: modalDateTo,
+      supplierIds: config.filterType === 'suppliers' ? modalSelectedIds : [],
+      clientIds: config.filterType === 'clients' ? modalSelectedIds : [],
+    });
+
+    setFilterModalFor(null);
+
+    setTimeout(() => {
+      handleExportPDF(elementId, fileName);
+      setTimeout(() => {
+        setExportFilters({ dateFrom: '', dateTo: '', supplierIds: [], clientIds: [] });
+      }, 1200);
+    }, 300);
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setModalSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const currentConfig = filterModalFor ? REPORT_CONFIG[filterModalFor] : null;
+  const allSelected = currentConfig && suppliers.length > 0 && suppliers.every(s => modalSelectedIds.includes(s.id));
+
+  const toggleAll = () => {
+    setModalSelectedIds(allSelected ? [] : suppliers.map(s => s.id));
+  };
+
+  const getModalAccent = (accent: string) => {
+    switch (accent) {
+      case 'emerald': return { icon: 'text-emerald-400', btn: 'bg-emerald-600 hover:bg-emerald-500 text-white', hint: 'text-emerald-400/60' };
+      case 'amber': return { icon: 'text-amber-400', btn: 'bg-amber-600 hover:bg-amber-500 text-white', hint: 'text-amber-400/60' };
+      case 'blue': return { icon: 'text-blue-400', btn: 'bg-blue-600 hover:bg-blue-500 text-white', hint: 'text-blue-400/60' };
+      case 'gold': return { icon: 'text-[#D5B042]', btn: 'bg-[#D5B042] hover:bg-[#D5B042]/80 text-black', hint: 'text-[#D5B042]/60' };
+      default: return { icon: 'text-[#D5B042]', btn: 'bg-[#D5B042] hover:bg-[#D5B042]/80 text-black', hint: 'text-[#D5B042]/60' };
+    }
+  };
+
+  const accent = currentConfig ? getModalAccent(currentConfig.accent) : null;
 
   return (
     <motion.div 
@@ -152,7 +231,7 @@ export default function ReportesPage() {
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-recibido', 'Reporte_Oro_Recibido')}
+              onClick={() => openFilterModal('report-oro-recibido')}
               disabled={exportingSection === 'report-oro-recibido'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/30 hover:bg-emerald-900/50 border border-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -181,12 +260,6 @@ export default function ReportesPage() {
               <span className="text-xs font-mono font-bold text-[#D5B042]">{oroRecibido.proveedores}</span>
               <span className="text-[9px] text-[#8C8C8C]/50 block">Clientes</span>
             </div>
-            <div className="col-span-2">
-              <span className="text-[10px] font-mono text-[#8C8C8C]">
-                Fino esperado:{' '}
-                <strong className="text-[#E5E5E5]">{(oroRecibido.finoTotal / 1000).toFixed(3)} kg Au</strong>
-              </span>
-            </div>
           </div>
         </motion.div>
 
@@ -208,7 +281,7 @@ export default function ReportesPage() {
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-refinado', 'Reporte_Oro_Refinado')}
+              onClick={() => openFilterModal('report-oro-refinado')}
               disabled={exportingSection === 'report-oro-refinado'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-950/30 hover:bg-amber-900/50 border border-amber-500/20 text-amber-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -271,7 +344,7 @@ export default function ReportesPage() {
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-espera', 'Reporte_Oro_Espera')}
+              onClick={() => openFilterModal('report-oro-espera')}
               disabled={exportingSection === 'report-oro-espera'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-950/30 hover:bg-blue-900/50 border border-blue-500/20 text-blue-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -329,7 +402,7 @@ export default function ReportesPage() {
             </div>
           </div>
           <button
-            onClick={() => handleExportPDF('report-clientes', 'Reporte_Balance_Clientes')}
+            onClick={() => openFilterModal('report-clientes')}
             disabled={exportingSection === 'report-clientes'}
             className="flex items-center gap-2 px-4 py-2 bg-[#D5B042]/10 hover:bg-[#D5B042]/20 border border-[#D5B042]/30 text-[#D5B042] text-[10px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
@@ -386,6 +459,124 @@ export default function ReportesPage() {
           </div>
         )}
       </motion.div>
+
+      <AnimatePresence>
+        {filterModalFor && currentConfig && accent && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setFilterModalFor(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-[#1C1C1C] rounded-2xl border border-neutral-800/40 w-full max-w-md p-5 space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Filter className={`w-4 h-4 ${accent.icon}`} />
+                  <span className="text-xs font-mono text-[#E5E5E5] uppercase tracking-wider font-semibold">
+                    Filtros — {currentConfig.title}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setFilterModalFor(null)}
+                  className="p-1 hover:bg-black/40 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-[#8C8C8C]" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-mono text-[#8C8C8C] uppercase tracking-wider mb-1 block">Fecha Desde</label>
+                  <input
+                    type="date"
+                    value={modalDateFrom}
+                    onChange={(e) => setModalDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 bg-black border border-neutral-800/40 rounded-lg text-xs font-mono text-[#E5E5E5] focus:outline-none focus:border-[#D5B042]/30 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-mono text-[#8C8C8C] uppercase tracking-wider mb-1 block">Fecha Hasta</label>
+                  <input
+                    type="date"
+                    value={modalDateTo}
+                    onChange={(e) => setModalDateTo(e.target.value)}
+                    className="w-full px-3 py-2 bg-black border border-neutral-800/40 rounded-lg text-xs font-mono text-[#E5E5E5] focus:outline-none focus:border-[#D5B042]/30 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[9px] font-mono text-[#8C8C8C] uppercase tracking-wider">
+                    {currentConfig.filterType === 'suppliers' ? 'Proveedores' : 'Clientes'}
+                  </label>
+                  <button
+                    onClick={toggleAll}
+                    className={`text-[9px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${allSelected ? 'text-red-400 hover:text-red-300' : accent.icon + ' hover:opacity-80'}`}
+                  >
+                    {allSelected ? 'Deseleccionar' : 'Seleccionar'} Todos
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1 bg-black/30 rounded-xl p-2 border border-neutral-800/30">
+                  {suppliers.map((s) => {
+                    const isSelected = modalSelectedIds.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-[#1C1C1C] transition-colors"
+                        onClick={() => toggleItemSelection(s.id)}
+                      >
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                          isSelected ? 'bg-[#D5B042] border-[#D5B042]' : 'bg-black border-neutral-700'
+                        }`}>
+                          {isSelected && <Check className="w-3 h-3 text-black" />}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#D5B042]">{s.code}</span>
+                        <span className="text-[10px] text-[#8C8C8C] truncate">{s.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {modalSelectedIds.length === 0 && (
+                  <p className={`text-[9px] font-mono mt-1.5 ${accent.hint}`}>
+                    Sin selección = Todos los {currentConfig.filterType === 'suppliers' ? 'proveedores' : 'clientes'} incluidos
+                  </p>
+                )}
+                {modalSelectedIds.length > 0 && (
+                  <p className="text-[9px] font-mono text-[#8C8C8C] mt-1.5">
+                    {modalSelectedIds.length} {currentConfig.filterType === 'suppliers' ? 'proveedor(es)' : 'cliente(s)'} seleccionado(s)
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-neutral-800/20">
+                <button
+                  onClick={() => setFilterModalFor(null)}
+                  className="px-4 py-2 text-[10px] font-mono font-bold uppercase tracking-wider text-[#8C8C8C] hover:text-[#E5E5E5] transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleExportWithFilters}
+                  className={`flex items-center gap-2 px-4 py-2 text-[10px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer ${accent.btn}`}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Generar PDF
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </motion.div>
   );
