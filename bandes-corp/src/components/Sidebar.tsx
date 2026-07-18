@@ -22,11 +22,11 @@ export const Sidebar: React.FC = () => {
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
   const menuItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, description: 'Resumen y KPIs' },
-    { id: 'ingresos', name: 'Ingresos de Oro', icon: ClipboardList, description: 'Registro de Barras' },
-    { id: 'procesos', name: 'Procesos de Fundición', icon: Flame, description: 'Mesa de Fundición' },
-    { id: 'egresos', name: 'Egresos / Despachos', icon: ArrowLeftRight, description: 'Salida de Fino' },
-    { id: 'reportes', name: 'Reportes y Balances', icon: FileText, description: 'Balances e Historial' },
+    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, description: 'Resumen' },
+    { id: 'ingresos', name: 'Ingresos de Material', icon: ClipboardList, description: 'Registro de Barras' },
+    { id: 'procesos', name: 'Procesos por Refundir', icon: Flame, description: 'Mesa de Fundición' },
+    { id: 'egresos', name: 'Egresos de Material', icon: ArrowLeftRight, description: 'Salida de barras' },
+    { id: 'reportes', name: 'Reportes', icon: FileText, description: '' },
   ];
 
   return (
@@ -113,10 +113,10 @@ export const Sidebar: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="font-sans font-extrabold text-[15px] tracking-widest text-[#F1F5F9] flex items-center gap-1.5">
                   <Coins className="w-4.5 h-4.5 text-[#D5B042]" />
-                  BANDES
+                  CONTROL
                 </span>
                 <span className="text-[9px] font-mono font-bold bg-[#D5B042]/10 text-[#D5B042] px-1.5 py-0.2 rounded border border-[#D5B042]/20">
-                  CORP
+                  MINING
                 </span>
               </div>
 
