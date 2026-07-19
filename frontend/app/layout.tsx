@@ -27,6 +27,9 @@ export default function RootLayout({
   const activeTab = pathname.replace('/', '') || 'dashboard';
   const [systemTime, setSystemTime] = useState<string>('');
 
+  // Nombre del usuario (puedes cambiarlo aquí o conectarlo a tu estado de autenticación más adelante)
+  const userName = 'Administrador';
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -66,7 +69,7 @@ export default function RootLayout({
                       <div className="hidden sm:flex flex-col">
                         <span className="text-sm font-semibold text-[#D5B042] uppercase tracking-wider flex items-center gap-2">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#D5B042] animate-pulse"></span>
-                          {activeTab} Bienvenido
+                          Bienvenido, {userName}
                         </span>
                       </div>
                     </div>
@@ -79,10 +82,10 @@ export default function RootLayout({
 
                       <div className="flex items-center gap-2.5 bg-black border border-neutral-800/40 pl-2.5 pr-4 py-1 rounded-full shadow-inner">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#8C6D1F] to-[#D5B042] flex items-center justify-center text-black font-bold text-xs">
-                          A
+                          {userName.charAt(0)}
                         </div>
                         <div className="hidden sm:flex flex-col text-left">
-                          <span className="text-[11px] font-bold text-[#E5E5E5] leading-none">Administrador</span>
+                          <span className="text-[11px] font-bold text-[#E5E5E5] leading-none">{userName}</span>
                           <span className="text-[9px] text-[#8C8C8C] font-mono mt-0.5 leading-none">Owner</span>
                         </div>
                       </div>
