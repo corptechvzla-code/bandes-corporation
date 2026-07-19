@@ -39,9 +39,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_STYLES: Record<string, string> = {
   IN_STOCK: 'bg-[#152B1E] text-emerald-400 border border-emerald-500/10',
-  PROCESANDO: 'bg-black text-[#A65B17] border border-[#A65B17]/20',
-  COMPLETADO: 'bg-black text-[#D5B042] border border-[#D5B042]/20',
-  EXITED: 'bg-blue-900/20 text-blue-400',
+  PROCESANDO: 'bg-[#2A1A0A] text-[#A65B17] border border-[#A65B17]/20',
+  COMPLETADO: 'bg-[#2A2008] text-[#D5B042] border border-[#D5B042]/20',
+  EXITED: 'bg-blue-900/20 text-blue-400 border border-blue-500/10',
 };
 
 export default function IngresosPage() {
@@ -634,24 +634,24 @@ export default function IngresosPage() {
                           <table className="w-full text-left text-xs font-sans">
                             <thead>
                               <tr className="border-b border-neutral-800/20 text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider">
-                                <th className="pb-2 sticky left-0 bg-black z-10">Código</th>
-                                <th className="pb-2 text-right">BRUTO</th>
-                                <th className="pb-2 text-right">FA</th>
-                                <th className="pb-2 text-right">R</th>
-                                <th className="pb-2 text-center">VERIFICADO</th>
-                                <th className="pb-2 text-center">Estado</th>
-                                <th className="pb-2 text-right">Acciones</th>
+                                <th className="py-3 text-center sticky left-0 bg-black/50 z-10">Código</th>
+                                <th className="py-3 text-center bg-black/50">BRUTO</th>
+                                <th className="py-3 text-center bg-black/50">FA</th>
+                                <th className="py-3 text-center bg-black/50">R</th>
+                                <th className="py-3 text-center bg-black/50">VERIFICADO</th>
+                                <th className="py-3 text-center bg-black/50">Estado</th>
+                                <th className="py-3 text-center bg-black/50 w-20">Acciones</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-neutral-800/20 text-[#E5E5E5]/90">
                               {groupBars.map(bar => (
                                 <tr key={bar.id} onClick={() => setSelectedBar(bar)} className="hover:bg-[#141414]/85 transition-colors cursor-pointer">
-                                  <td className="py-3 font-mono font-bold text-[#D5B042] sticky left-0 bg-black z-10">{bar.barNumber}</td>
-                                  <td className="py-3 text-right font-mono">{formatNumber(Number(bar.grossWeight))} g</td>
-                                  <td className="py-3 text-right font-mono text-[#8C8C8C]">{formatNumber(Number(bar.fineWeight))} g</td>
-                                  <td className="py-3 text-right font-mono text-[#8C8C8C]">--</td>
+                                  <td className="py-3 text-center font-mono font-bold text-[#D5B042] sticky left-0 bg-black z-10">{bar.barNumber}</td>
+                                  <td className="py-3 text-center font-mono">{formatNumber(Number(bar.grossWeight))} g</td>
+                                  <td className="py-3 text-center  font-mono text-[#8C8C8C]">{formatNumber(Number(bar.fineWeight))} g</td>
+                                  <td className="py-3 text-center font-mono text-[#8C8C8C]">--</td>
                                   <td className="py-3 text-center">
-                                    <span className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-mono font-semibold ${verifiedBars.has(bar.id) ? 'bg-[#152B1E] text-emerald-400 border border-emerald-500/10' : 'bg-black text-[#A65B17] border border-[#A65B17]/20'}`}>
+                                    <span className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-mono font-semibold ${verifiedBars.has(bar.id) ? 'bg-[#152B1E] text-emerald-400 border border-emerald-500/10' : 'bg-[#2A1A0A] text-[#A65B17] border border-[#A65B17]/20'}`}>
                                       {verifiedBars.has(bar.id) ? 'VERIFICADO' : 'POR VERIFICAR'}
                                     </span>
                                   </td>
@@ -660,21 +660,23 @@ export default function IngresosPage() {
                                       {STATUS_LABELS[bar.status] || bar.status}
                                     </span>
                                   </td>
-                                  <td className="py-3 text-right flex items-center justify-end gap-1">
-                                    <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(bar); }}
-                                      disabled={bar.status !== 'IN_STOCK'}
-                                      className={`p-1.5 rounded hover:bg-[#D5B042]/10 text-[#8C8C8C] hover:text-[#D5B042] transition-colors cursor-pointer
-                                        ${bar.status !== 'IN_STOCK' ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                      title={bar.status !== 'IN_STOCK' ? 'No se puede editar un material en proceso.' : 'Editar barra'}>
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(bar.id); }}
-                                      disabled={bar.status !== 'IN_STOCK'}
-                                      className={`p-1.5 rounded hover:bg-red-500/10 text-[#8C8C8C] hover:text-red-400 transition-colors cursor-pointer
-                                        ${bar.status !== 'IN_STOCK' ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                      title={bar.status !== 'IN_STOCK' ? 'No se puede eliminar un material en proceso.' : 'Eliminar barra'}>
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                  <td className="py-3 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(bar); }}
+                                        disabled={bar.status !== 'IN_STOCK'}
+                                        className={`p-1 rounded hover:bg-[#D5B042]/10 text-[#8C8C8C] hover:text-[#D5B042] transition-colors cursor-pointer
+                                          ${bar.status !== 'IN_STOCK' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                        title={bar.status !== 'IN_STOCK' ? 'No se puede editar un material en proceso.' : 'Editar barra'}>
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(bar.id); }}
+                                        disabled={bar.status !== 'IN_STOCK'}
+                                        className={`p-1 rounded hover:bg-red-500/10 text-[#8C8C8C] hover:text-red-400 transition-colors cursor-pointer
+                                          ${bar.status !== 'IN_STOCK' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                        title={bar.status !== 'IN_STOCK' ? 'No se puede eliminar un material en proceso.' : 'Eliminar barra'}>
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
