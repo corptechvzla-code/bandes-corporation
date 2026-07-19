@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useClients } from '@/hooks/useClients';
-import { useBars, useCreateBar, useBulkUploadBars } from '@/hooks/useBars';
+import { useBars, useCreateBar, useBulkUploadBars, useUpdateBar } from '@/hooks/useBars';
 import { api } from '@/lib/api';
 import { formatNumber } from '@/lib/format';
 import type { Bar, BulkUploadResult } from '@/types/api';
@@ -23,6 +23,10 @@ import {
   Check,
   Sparkles,
   Info,
+  Pencil,
+  Weight,
+  Microscope,
+  X,
 } from 'lucide-react';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -63,6 +67,11 @@ export default function IngresosPage() {
   const [deletingState, setDeletingState] = useState<{ id: string; status: 'deleting' | 'success' } | null>(null);
   const [ingestingState, setIngestingState] = useState<{ barNumber: string; status: 'ingesting' | 'success' } | null>(null);
   const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>({});
+  const updateBar = useUpdateBar();
+  const [editingBar, setEditingBar] = useState<Bar | null>(null);
+  const [editGrossWeight, setEditGrossWeight] = useState<string>('');
+  const [editPurity, setEditPurity] = useState<string>('');
+  const [editLeyAg, setEditLeyAg] = useState<string>('');
 
   const liveFA = useMemo(() => {
     const w = parseFloat(grossWeight);
@@ -204,6 +213,30 @@ export default function IngresosPage() {
     a.download = 'plantilla-carga-masiva.xlsx';
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleOpenEdit = (bar: Bar) => {
+    setEditingBar(bar);
+    setEditGrossWeight(bar.grossWeight.toString());
+    setEditPurity(bar.purity.toString());
+    setEditLeyAg((bar.leyAg || 0).toString());
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingBar) return;
+    const gw = parseFloat(editGrossWeight);
+    const p = parseFloat(editPurity);
+    const la = parseFloat(editLeyAg);
+    if (isNaN(gw) || gw <= 0 || isNaN(p) || p < 0 || p > 1000 || isNaN(la) || la < 0 || la > 1000) return;
+    try {
+      await updateBar.mutateAsync({
+        id: editingBar.id,
+        data: { grossWeight: gw, purity: p, leyAg: la || undefined },
+      });
+      setEditingBar(null);
+    } catch (err: any) {
+      console.error('Error al editar barra:', err);
+    }
   };
 
   const handleDeleteBar = async (id: string) => {
@@ -551,7 +584,14 @@ export default function IngresosPage() {
                                       {STATUS_LABELS[bar.status] || bar.status}
                                     </span>
                                   </td>
-                                  <td className="py-3 text-right">
+                                  <td className="py-3 text-right flex items-center justify-end gap-1">
+                                    <button onClick={() => handleOpenEdit(bar)}
+                                      disabled={bar.status !== 'IN_STOCK'}
+                                      className={`p-1.5 rounded hover:bg-[#D5B042]/10 text-[#8C8C8C] hover:text-[#D5B042] transition-colors cursor-pointer
+                                        ${bar.status !== 'IN_STOCK' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                      title={bar.status !== 'IN_STOCK' ? 'No se puede editar un material en proceso.' : 'Editar barra'}>
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
                                     <button onClick={() => setConfirmDeleteId(bar.id)}
                                       disabled={bar.status !== 'IN_STOCK'}
                                       className={`p-1.5 rounded hover:bg-red-500/10 text-[#8C8C8C] hover:text-red-400 transition-colors cursor-pointer
@@ -690,6 +730,82 @@ export default function IngresosPage() {
                     <p className="text-sm font-sans font-bold text-emerald-400">Barra Eliminada</p>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingBar && (
+          <motion.div key="edit-bar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#1C1C1C] border border-neutral-800/40 rounded-2xl w-full max-w-md overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.8)]">
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-[#D5B042]/10 rounded-lg border border-[#D5B042]/20">
+                      <Pencil className="w-5 h-5 text-[#D5B042]" />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono text-[#D5B042] bg-[#D5B042]/10 border border-[#D5B042]/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                        Editar Barra
+                      </span>
+                      <h3 className="text-sm font-sans font-bold text-[#E5E5E5] mt-1">{editingBar.barNumber}</h3>
+                    </div>
+                  </div>
+                  <button onClick={() => setEditingBar(null)}
+                    className="p-1 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer">
+                    <X className="w-4 h-4 text-[#8C8C8C]" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-mono text-[#8C8C8C] uppercase flex items-center gap-1">
+                      <Weight className="w-3 h-3" /> Peso Bruto (g)
+                    </label>
+                    <input type="number" step="0.01" value={editGrossWeight}
+                      onChange={(e) => setEditGrossWeight(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg px-3 py-2.5 text-xs font-sans text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-mono text-[#8C8C8C] uppercase flex items-center gap-1">
+                      <Microscope className="w-3 h-3" /> Pureza Au (‰)
+                    </label>
+                    <input type="number" step="1" value={editPurity}
+                      onChange={(e) => setEditPurity(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg px-3 py-2.5 text-xs font-sans text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-mono text-[#8C8C8C] uppercase">Ley Ag Plata (‰)</label>
+                    <input type="number" step="1" value={editLeyAg}
+                      onChange={(e) => setEditLeyAg(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg px-3 py-2.5 text-xs font-sans text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors" />
+                  </div>
+                  <div className="bg-black p-3 rounded-xl border border-neutral-800/40 space-y-1">
+                    <span className="text-[9px] font-mono text-[#8C8C8C] uppercase">FA / FE Recalculado</span>
+                    <div className="flex gap-4 text-xs font-mono">
+                      <span className="text-[#E5E5E5]">
+                        FA: <strong className="text-[#D5B042]">{formatNumber(parseFloat(editGrossWeight || '0') * (parseFloat(editPurity || '0') / 1000))} g</strong>
+                      </span>
+                      <span className="text-[#E5E5E5]">
+                        FE: <strong className="text-[#D5B042]">{formatNumber(parseFloat(editGrossWeight || '0') * (parseFloat(editPurity || '0') / 1000) * 0.99)} g</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 bg-black/20 border-t border-neutral-800/20 flex gap-3 justify-end">
+                <button onClick={() => setEditingBar(null)}
+                  className="py-2.5 px-4 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer">
+                  Cancelar
+                </button>
+                <button onClick={handleSaveEdit} disabled={updateBar.isPending}
+                  className="py-2.5 px-4 bg-gradient-to-r from-[#B4941E] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider rounded-xl hover:brightness-110 transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5" />{updateBar.isPending ? 'GUARDANDO...' : 'Guardar Cambios'}
+                </button>
               </div>
             </motion.div>
           </motion.div>

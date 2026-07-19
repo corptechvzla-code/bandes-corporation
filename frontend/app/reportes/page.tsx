@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import {
   FileText, Download, ArrowDownLeft, ArrowUpRight,
   Sparkles, Scale, CheckCircle2, Clock, RefreshCw, Info,
-  Flame, TrendingUp, Coins,
+  Flame, TrendingUp, Coins, Filter, X, Check,
 } from 'lucide-react';
 import { useBars } from '@/hooks/useBars';
 import { useClients } from '@/hooks/useClients';
@@ -23,21 +23,37 @@ export default function ReportesPage() {
   const { data: lots = [] } = useLots();
   const { data: exits = [] } = useMaterialExits();
   const [exportingSection, setExportingSection] = useState<string | null>(null);
+  const [filterModalFor, setFilterModalFor] = useState<string | null>(null);
+  const [modalDateFrom, setModalDateFrom] = useState('');
+  const [modalDateTo, setModalDateTo] = useState('');
+  const [modalSelectedIds, setModalSelectedIds] = useState<string[]>([]);
+  const [exportFilters, setExportFilters] = useState<{
+    dateFrom: string; dateTo: string; clientIds: string[];
+  }>({ dateFrom: '', dateTo: '', clientIds: [] });
+
+  const filteredBars = useMemo(() => {
+    return bars.filter(b => {
+      if (exportFilters.dateFrom && b.createdAt < exportFilters.dateFrom) return false;
+      if (exportFilters.dateTo && b.createdAt > exportFilters.dateTo + 'T23:59:59') return false;
+      if (exportFilters.clientIds.length > 0 && !exportFilters.clientIds.includes(b.clientId)) return false;
+      return true;
+    });
+  }, [bars, exportFilters]);
 
   const oroRecibido = useMemo(() => {
-    const totalBarras = bars.length;
-    const pesoBruto = bars.reduce((sum, b) => sum + b.grossWeight, 0);
-    const finoTotal = bars.reduce((sum, b) => sum + b.fineWeight, 0);
-    const clientes = new Set(bars.map(b => b.clientId)).size;
+    const totalBarras = filteredBars.length;
+    const pesoBruto = filteredBars.reduce((sum, b) => sum + b.grossWeight, 0);
+    const finoTotal = filteredBars.reduce((sum, b) => sum + b.fineWeight, 0);
+    const clientes = new Set(filteredBars.map(b => b.clientId)).size;
     return { totalBarras, pesoBruto, finoTotal, clientes };
-  }, [bars]);
+  }, [filteredBars]);
 
   const oroRefinado = useMemo(() => {
     const closedLots = lots.filter(l => l.recovered != null);
-    const completedBars = bars.filter(b => b.status === 'COMPLETADO' || b.status === 'EXITED');
+    const completedBars = filteredBars.filter(b => b.status === 'COMPLETADO' || b.status === 'EXITED');
     const totalRecovered = closedLots.reduce((sum, l) => sum + (l.recovered || 0), 0);
     const completedLotIds = new Set(closedLots.map(l => l.id));
-    const completedLotsBars = bars.filter(b => b.lotId && completedLotIds.has(b.lotId));
+    const completedLotsBars = filteredBars.filter(b => b.lotId && completedLotIds.has(b.lotId));
     const totalExpected = completedLotsBars.reduce((sum, b) => sum + b.fineWeight, 0);
     const eficiencia = totalExpected > 0 ? (totalRecovered / totalExpected) * 100 : 0;
     const enProceso = processes.filter(p => p.status === 'OPEN');
@@ -49,19 +65,19 @@ export default function ReportesPage() {
       totalExpected,
       eficiencia,
     };
-  }, [lots, bars, processes]);
+  }, [filteredBars, lots, processes]);
 
   const oroEnEspera = useMemo(() => {
-    const waiting = bars.filter(b => b.status === 'IN_STOCK');
+    const waiting = filteredBars.filter(b => b.status === 'IN_STOCK');
     const pesoBruto = waiting.reduce((sum, b) => sum + b.grossWeight, 0);
     const finoTotal = waiting.reduce((sum, b) => sum + b.fineWeight, 0);
     const clientes = new Set(waiting.map(b => b.clientId)).size;
     return { count: waiting.length, pesoBruto, finoTotal, clientes };
-  }, [bars]);
+  }, [filteredBars]);
 
   const clientesReport = useMemo(() => {
     const map = new Map<string, { name: string; received: number; delivered: number }>();
-    bars.forEach(b => {
+    filteredBars.forEach(b => {
       const clientName = clients.find(c => c.id === b.clientId)?.name || 'Desconocido';
       const entry = map.get(b.clientId) || { name: clientName, received: 0, delivered: 0 };
       entry.received += b.fineWeight;
@@ -69,7 +85,7 @@ export default function ReportesPage() {
       map.set(b.clientId, entry);
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [bars, clients]);
+  }, [filteredBars, clients]);
 
   const handleExportPDF = useCallback(async (elementId: string, title: string) => {
     setExportingSection(elementId);
@@ -99,6 +115,32 @@ export default function ReportesPage() {
       setExportingSection(null);
     }
   }, []);
+
+  const openFilterModal = (reportId: string) => {
+    setModalDateFrom(exportFilters.dateFrom);
+    setModalDateTo(exportFilters.dateTo);
+    setModalSelectedIds(exportFilters.clientIds);
+    setFilterModalFor(reportId);
+  };
+
+  const handleExportWithFilters = () => {
+    if (!filterModalFor) return;
+    setExportFilters({
+      dateFrom: modalDateFrom,
+      dateTo: modalDateTo,
+      clientIds: modalSelectedIds,
+    });
+    setFilterModalFor(null);
+    setTimeout(() => {
+      handleExportPDF(filterModalFor, filterModalFor.replace('report-', 'Reporte_'));
+    }, 300);
+  };
+
+  const toggleClientFilter = (id: string) => {
+    setModalSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-8">
@@ -131,7 +173,7 @@ export default function ReportesPage() {
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-recibido', 'Reporte_Oro_Recibido')}
+              onClick={() => openFilterModal('report-oro-recibido')}
               disabled={exportingSection === 'report-oro-recibido'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/30 hover:bg-emerald-900/50 border border-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -187,7 +229,7 @@ export default function ReportesPage() {
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-fundido', 'Reporte_Oro_Fundido')}
+              onClick={() => openFilterModal('report-oro-fundido')}
               disabled={exportingSection === 'report-oro-fundido'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-950/30 hover:bg-amber-900/50 border border-amber-500/20 text-amber-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -250,7 +292,7 @@ export default function ReportesPage() {
               </div>
             </div>
             <button
-              onClick={() => handleExportPDF('report-oro-espera', 'Reporte_Oro_Espera')}
+              onClick={() => openFilterModal('report-oro-espera')}
               disabled={exportingSection === 'report-oro-espera'}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-950/30 hover:bg-blue-900/50 border border-blue-500/20 text-blue-300 text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
             >
@@ -307,7 +349,7 @@ export default function ReportesPage() {
             </div>
           </div>
           <button
-            onClick={() => handleExportPDF('report-clientes', 'Reporte_Balance_Clientes')}
+            onClick={() => openFilterModal('report-clientes')}
             disabled={exportingSection === 'report-clientes'}
             className="flex items-center gap-2 px-4 py-2 bg-[#D5B042]/10 hover:bg-[#D5B042]/20 border border-[#D5B042]/30 text-[#D5B042] text-[10px] font-mono font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
@@ -364,6 +406,71 @@ export default function ReportesPage() {
           </div>
         )}
       </motion.div>
+      <AnimatePresence>
+        {filterModalFor && (
+          <motion.div key="filter-modal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#1C1C1C] border border-neutral-800/40 rounded-2xl w-full max-w-md overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.8)]">
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-5 h-5 text-[#D5B042]" />
+                    <h3 className="text-sm font-bold text-[#E5E5E5]">Filtrar Reporte</h3>
+                  </div>
+                  <button onClick={() => setFilterModalFor(null)}
+                    className="p-1 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer">
+                    <X className="w-4 h-4 text-[#8C8C8C]" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Desde</label>
+                      <input type="date" value={modalDateFrom} onChange={(e) => setModalDateFrom(e.target.value)}
+                        className="w-full bg-black border border-neutral-800/40 rounded-lg px-3 py-2 text-xs text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Hasta</label>
+                      <input type="date" value={modalDateTo} onChange={(e) => setModalDateTo(e.target.value)}
+                        className="w-full bg-black border border-neutral-800/40 rounded-lg px-3 py-2 text-xs text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Clientes</label>
+                    <div className="max-h-40 overflow-y-auto space-y-1 bg-black rounded-lg border border-neutral-800/40 p-2">
+                      {clients.length === 0 ? (
+                        <p className="text-[11px] text-[#8C8C8C] p-2">No hay clientes registrados.</p>
+                      ) : (
+                        clients.map(c => (
+                          <button key={c.id} onClick={() => toggleClientFilter(c.id)}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer
+                              ${modalSelectedIds.includes(c.id) ? 'bg-[#D5B042]/10 text-[#D5B042]' : 'text-[#8C8C8C] hover:text-[#E5E5E5] hover:bg-black/50'}`}>
+                            <span>{c.name}</span>
+                            {modalSelectedIds.includes(c.id) && <Check className="w-3 h-3 shrink-0" />}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 bg-black/20 border-t border-neutral-800/20 flex gap-3 justify-end">
+                <button onClick={() => setFilterModalFor(null)}
+                  className="py-2 px-4 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer">
+                  Cancelar
+                </button>
+                <button onClick={handleExportWithFilters}
+                  className="py-2 px-4 bg-gradient-to-r from-[#B4941E] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider rounded-xl hover:brightness-110 transition-all duration-200 cursor-pointer flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Exportar PDF
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

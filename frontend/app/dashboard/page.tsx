@@ -5,10 +5,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useBars } from '@/hooks/useBars';
 import { useMaterialExits } from '@/hooks/useExits';
 import { useClients } from '@/hooks/useClients';
+import { useLots } from '@/hooks/useLots';
 import { formatNumber } from '@/lib/format';
 import {
-  Flame, ClipboardList, CheckCircle2, TrendingUp, Scale,
-  Clock, ArrowUpRight, Sparkles, Coins, ArrowLeftRight,
+  Flame, ClipboardList, CheckCircle2, TrendingUp, TrendingDown, Scale,
+  Clock, ArrowUpRight, Sparkles, Coins, ArrowLeftRight, ChevronDown, ChevronUp, Table2,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
@@ -50,16 +51,24 @@ export default function DashboardPage() {
   const { data: bars = [] } = useBars();
   const { data: clients = [] } = useClients();
   const { data: exits = [] } = useMaterialExits();
+  const { data: lots = [] } = useLots();
   const [hoveredSupplier, setHoveredSupplier] = useState<any | null>(null);
   const [hoveredClient, setHoveredClient] = useState<any | null>(null);
   const [supplierLayout, setSupplierLayout] = useState<'grid' | 'bars'>('grid');
   const [clientLayout, setClientLayout] = useState<'grid' | 'bars'>('grid');
+  const [showSupplierTable, setShowSupplierTable] = useState<boolean>(false);
+  const [showClientTable, setShowClientTable] = useState<boolean>(false);
 
   const inStockBars = bars.filter(b => b.status === 'IN_STOCK');
   const todayBarsCount = inStockBars.length;
   const todayBarsWeight = inStockBars.reduce((s, b) => s + Number(b.grossWeight), 0);
 
   const exitedWeight = bars.filter(b => b.status === 'EXITED').reduce((s, b) => s + Number(b.fineWeight), 0);
+
+  const totalFA = bars.reduce((s, b) => s + Number(b.fineWeight), 0);
+  const totalRecovered = lots.filter(l => l.recovered != null).reduce((s, l) => s + Number(l.recovered), 0);
+  const mermaG = Math.max(0, totalFA - totalRecovered);
+  const mermaPct = totalFA > 0 ? (mermaG / totalFA) * 100 : 0;
 
   const supplierData = clients.map(c => {
     const cBars = bars.filter(b => b.clientId === c.id);
@@ -166,7 +175,7 @@ export default function DashboardPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08, duration: 0.55 }}
           className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#D5B042]/5 to-transparent rounded-bl-full pointer-events-none"></div>
@@ -223,6 +232,25 @@ export default function DashboardPage() {
             </p>
           </div>
         </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38, duration: 0.55 }}
+          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-red-500/30">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-red-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="p-2 bg-black rounded-lg border border-red-500/20"><TrendingDown className="w-5 h-5 text-red-400" /></div>
+            <span className="text-[9px] text-red-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-red-500/10">⚙ MERMA</span>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Merma de Fundición (FA - R)</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{mermaPct.toFixed(1)}<span className="text-lg">%</span></span>
+              <span className="text-[10.5px] text-[#8C8C8C]">Merma</span>
+            </div>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
+              <Scale className="w-3 h-3 text-red-400" />Pérdida Total: <strong className="text-[#E5E5E5]">{(mermaG / 1000).toFixed(3)} kg Au</strong>
+            </p>
+          </div>
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -251,6 +279,39 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+          <button onClick={() => setShowSupplierTable(!showSupplierTable)}
+            className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-black/50 hover:bg-black border border-neutral-800/40 rounded-lg text-[10px] font-mono text-[#8C8C8C] hover:text-[#E5E5E5] transition-colors cursor-pointer">
+            <Table2 className="w-3.5 h-3.5" />
+            {showSupplierTable ? 'Ocultar' : 'Ver'} Detalle por Cliente
+            {showSupplierTable ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          {showSupplierTable && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans">
+                <thead>
+                  <tr className="border-b border-neutral-800/40 text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider">
+                    <th className="py-2">Cliente</th>
+                    <th className="py-2 text-right">Bruto (kg)</th>
+                    <th className="py-2 text-right">FA (g)</th>
+                    <th className="py-2 text-right">Barras</th>
+                    <th className="py-2 text-right">Pureza</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-800/20">
+                  {supplierData.map(s => (
+                    <tr key={s.id} className="hover:bg-black/40 transition-colors">
+                      <td className="py-2 font-medium text-[#E5E5E5]">{s.name}</td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{(s.value / 1000).toFixed(3)}</td>
+                      <td className="py-2 text-right font-mono text-[#D5B042]">{Math.round(s.value).toLocaleString()}</td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{s.count} u</td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{s.avgPurity}‰</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </motion.div>
+          )}
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.52, duration: 0.5 }}
@@ -278,6 +339,35 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+          <button onClick={() => setShowClientTable(!showClientTable)}
+            className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-black/50 hover:bg-black border border-neutral-800/40 rounded-lg text-[10px] font-mono text-[#8C8C8C] hover:text-[#E5E5E5] transition-colors cursor-pointer">
+            <Table2 className="w-3.5 h-3.5" />
+            {showClientTable ? 'Ocultar' : 'Ver'} Detalle por Cliente
+            {showClientTable ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          {showClientTable && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans">
+                <thead>
+                  <tr className="border-b border-neutral-800/40 text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider">
+                    <th className="py-2">Cliente</th>
+                    <th className="py-2 text-right">Despachado (kg)</th>
+                    <th className="py-2 text-right">Envíos</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-800/20">
+                  {clientData.map(c => (
+                    <tr key={c.id} className="hover:bg-black/40 transition-colors">
+                      <td className="py-2 font-medium text-[#E5E5E5]">{c.name}</td>
+                      <td className="py-2 text-right font-mono text-[#D5B042]">{(c.value / 1000).toFixed(3)}</td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{c.count} envíos</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </motion.div>
+          )}
         </motion.div>
       </div>
 

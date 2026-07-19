@@ -109,6 +109,9 @@ export interface CreateBarRequest {
 export interface UpdateBarRequest {
   lotId?: string | null;
   status?: 'IN_STOCK' | 'PROCESANDO' | 'COMPLETADO' | 'EXITED';
+  grossWeight?: number;
+  purity?: number;
+  leyAg?: number;
 }
 
 export interface CreateProcessRequest {
