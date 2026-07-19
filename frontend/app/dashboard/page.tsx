@@ -10,7 +10,7 @@ import {
   Flame, ClipboardList, Clock, Scale, Coins, Sparkles, TrendingDown,
   ChevronDown, ChevronUp, Table2, ArrowUpRight
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface TreemapRect {
   id: string; x: number; y: number; w: number; h: number;
@@ -46,6 +46,37 @@ function generateBarsLayout(items: any[], w: number, h: number): TreemapRect[] {
   });
 }
 
+// Componente personalizado para el Tooltip de la gráfica
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#1E1E22] border border-[#323238] rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)] p-3.5 min-w-[150px] backdrop-blur-xs">
+        <p className="text-[#8C8C8C] font-bold text-[10px] uppercase tracking-wider mb-2 font-mono">
+          {label}
+        </p>
+        <div className="space-y-1.5">
+          {payload.map((entry: any) => {
+            const isIn = entry.name === 'in';
+            const labelColor = isIn ? '#22C55E' : '#D5B042';
+            const labelText = isIn ? 'Ingreso' : 'Egreso';
+            return (
+              <div key={entry.name} className="flex justify-between items-center text-xs font-sans gap-4">
+                <span style={{ color: labelColor }} className="font-bold">
+                  {labelText}
+                </span>
+                <span className="text-[#E5E5E5] font-mono">
+                  {entry.value.toLocaleString(undefined, { minimumFractionDigits: 1 })} g
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function DashboardPage() {
   const { data: bars = [] } = useBars();
   const { data: clients = [] } = useClients();
@@ -57,8 +88,6 @@ export default function DashboardPage() {
   const [clientLayout, setClientLayout] = useState<'grid' | 'bars'>('grid');
   const [showSupplierTable, setShowSupplierTable] = useState<boolean>(false);
   const [showClientTable, setShowClientTable] = useState<boolean>(false);
-
-  // --- CÁLCULOS PARA LOS CONTADORES NUEVOS ---
 
   // 1. Oro Recibido (Todas las barras registradas)
   const totalReceivedWeight = bars.reduce((s, b) => s + Number(b.grossWeight), 0);
@@ -77,11 +106,6 @@ export default function DashboardPage() {
   const totalFA = bars.reduce((s, b) => s + Number(b.fineWeight), 0);
   const mermaG = Math.max(0, totalFA - totalRecovered);
   const mermaPct = totalFA > 0 ? (mermaG / totalFA) * 100 : 0;
-
-  // Excedente de egresos (para mantener compatibilidad si se usa abajo)
-  const exitedWeight = bars.filter(b => b.status === 'EXITED').reduce((s, b) => s + Number(b.fineWeight), 0);
-
-  // --- FIN DE NUEVOS CÁLCULOS ---
 
   const supplierData = clients.map(c => {
     const cBars = bars.filter(b => b.clientId === c.id);
@@ -189,7 +213,6 @@ export default function DashboardPage() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="space-y-8">
       
-      {/* SECCIÓN DE CONTADORES ACTUALIZADOS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         
         {/* Tarjeta 1: Oro recibido */}
@@ -200,14 +223,16 @@ export default function DashboardPage() {
             <div className="p-2 bg-black rounded-lg border border-[#D5B042]/20"><ClipboardList className="w-5 h-5 text-[#D5B042]" /></div>
             <span className="text-[9px] text-[#D5B042] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#D5B042]/20">REGISTRO</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Oro recibido</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(totalReceivedWeight / 1000).toFixed(3)}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">kg</span>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Oro recibido</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate" title={(totalReceivedWeight / 1000).toFixed(4)}>
+                {(totalReceivedWeight / 1000).toFixed(4)}
+              </span>
+              <span className="text-[10.5px] text-[#8C8C8C] shrink-0">kg</span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Scale className="w-3 h-3 text-[#D5B042]" />Barras totales: <strong className="text-[#E5E5E5]">{totalReceivedCount} u</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Scale className="w-3 h-3 text-[#D5B042] shrink-0" />Barras totales: <strong className="text-[#E5E5E5] truncate">{totalReceivedCount} u</strong>
             </p>
           </div>
         </motion.div>
@@ -220,14 +245,16 @@ export default function DashboardPage() {
             <div className="p-2 bg-black rounded-lg border border-[#A65B17]/20"><Flame className="w-5 h-5 text-[#A65B17] animate-pulse" /></div>
             <span className="text-[9px] text-[#A65B17] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#A65B17]/20">FUNDICIÓN</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Oro refundido</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(totalRecovered / 1000).toFixed(3)}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">kg Au</span>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Oro refundido</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate" title={(totalRecovered / 1000).toFixed(4)}>
+                {(totalRecovered / 1000).toFixed(4)}
+              </span>
+              <span className="text-[10.5px] text-[#8C8C8C] shrink-0">kg Au</span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Sparkles className="w-3 h-3 text-[#A65B17]" />Lotes procesados: <strong className="text-[#E5E5E5]">{processedLotsCount} u</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Sparkles className="w-3 h-3 text-[#A65B17] shrink-0" />Lotes procesados: <strong className="text-[#E5E5E5] truncate">{processedLotsCount} u</strong>
             </p>
           </div>
         </motion.div>
@@ -240,14 +267,16 @@ export default function DashboardPage() {
             <div className="p-2 bg-black rounded-lg border border-emerald-500/20"><Clock className="w-5 h-5 text-emerald-500" /></div>
             <span className="text-[9px] text-emerald-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-emerald-500/10">BÓVEDA</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Oro en espera por proceso</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(inStockWeight / 1000).toFixed(3)}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">kg</span>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Oro en espera por proceso</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate" title={(inStockWeight / 1000).toFixed(4)}>
+                {(inStockWeight / 1000).toFixed(4)}
+              </span>
+              <span className="text-[10.5px] text-[#8C8C8C] shrink-0">kg</span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <ArrowUpRight className="w-3 h-3 text-emerald-400" />Barras en stock: <strong className="text-[#E5E5E5]">{inStockCount} u</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <ArrowUpRight className="w-3 h-3 text-emerald-400" />Barras en stock: <strong className="text-[#E5E5E5] truncate">{inStockCount} u</strong>
             </p>
           </div>
         </motion.div>
@@ -260,14 +289,16 @@ export default function DashboardPage() {
             <div className="p-2 bg-black rounded-lg border border-red-500/20"><TrendingDown className="w-5 h-5 text-red-400" /></div>
             <span className="text-[9px] text-red-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-red-500/10">MERMA</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Merma</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{mermaPct.toFixed(1)}<span className="text-lg">%</span></span>
-              <span className="text-[10.5px] text-[#8C8C8C]">Merma</span>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Merma</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate">
+                {mermaPct.toFixed(1)}<span className="text-lg">%</span>
+              </span>
+              <span className="text-[10.5px] text-[#8C8C8C] shrink-0">Merma</span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Scale className="w-3 h-3 text-red-400" />Pérdida Total: <strong className="text-[#E5E5E5]">{(mermaG / 1000).toFixed(3)} kg Au</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Scale className="w-3 h-3 text-red-400 shrink-0" />Pérdida Total: <strong className="text-[#E5E5E5] truncate">{(mermaG / 1000).toFixed(4)} kg Au</strong>
             </p>
           </div>
         </motion.div>
@@ -408,32 +439,53 @@ export default function DashboardPage() {
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={flowData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#22C55E" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#166534" stopOpacity={0.7} />
+                  </linearGradient>
+                  <linearGradient id="bronzeGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#D5B042" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#A65B17" stopOpacity={0.7} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-                <XAxis dataKey="dateShort" stroke="#8C8C8C" tick={{ fontSize: 10, fill: '#8C8C8C' }} axisLine={{ stroke: '#2A2A2A' }} tickLine={false} />
+                <XAxis dataKey="dateShort" stroke="#525151" tick={{ fontSize: 10, fill: '#8C8C8C' }} axisLine={{ stroke: '#2A2A2A' }} tickLine={false} />
                 <YAxis stroke="#8C8C8C" tick={{ fontSize: 10, fill: '#8C8C8C' }} axisLine={{ stroke: '#2A2A2A' }} tickLine={false}
                   tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}kg` : `${v}g`} />
-                <Tooltip cursor={{ fill: 'rgba(180, 148, 30, 0.06)' }}
-                  contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #B4941E', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', padding: '10px 14px' }}
-                  labelStyle={{ color: '#D5B042', fontWeight: 700, fontSize: 12, marginBottom: 4 }}
-                  formatter={(value: number, name: string) => [`${value.toLocaleString(undefined, { minimumFractionDigits: 1 })} g`, name === 'in' ? 'Ingresos (IN)' : 'Egresos (OUT)']} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: '#8C8C8C', paddingTop: 8 }}
-                  formatter={(value: string) => value === 'in' ? 'Ingresos (IN)' : 'Egresos (OUT)'} />
-                <Bar dataKey="in" name="in" radius={[4, 4, 0, 0]} animationDuration={1000} animationEasing="ease-out" maxBarSize={40}>
-                  {flowData.map((_, idx) => (<Cell key={`in-${idx}`} fill={`url(#greenGrad-${idx})`} />))}
-                </Bar>
-                <Bar dataKey="out" name="out" radius={[4, 4, 0, 0]} animationDuration={1000} animationEasing="ease-out" animationBegin={200} maxBarSize={40}>
-                  {flowData.map((_, idx) => (<Cell key={`out-${idx}`} fill={`url(#bronzeGrad-${idx})`} />))}
-                </Bar>
-                <defs>{flowData.map((_, idx) => (
-                  <React.Fragment key={`grads-${idx}`}>
-                    <linearGradient id={`greenGrad-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22C55E" stopOpacity={0.9} /><stop offset="100%" stopColor="#166534" stopOpacity={0.7} />
-                    </linearGradient>
-                    <linearGradient id={`bronzeGrad-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#D5B042" stopOpacity={0.9} /><stop offset="100%" stopColor="#A65B17" stopOpacity={0.7} />
-                    </linearGradient>
-                  </React.Fragment>
-                ))}</defs>
+                
+                <Tooltip 
+                  cursor={{ fill: 'rgba(213, 176, 66, 0.04)' }} 
+                  content={<CustomTooltip />} 
+                />
+
+                <Legend 
+                  iconType="circle" 
+                  iconSize={8} 
+                  wrapperStyle={{ fontSize: 11, color: '#8C8C8C', paddingTop: 8 }}
+                  formatter={(value: string) => value === 'in' ? 'Ingreso' : 'Egreso'} 
+                />
+                
+                <Bar 
+                  dataKey="in" 
+                  name="in" 
+                  fill="url(#greenGrad)"
+                  radius={[4, 4, 0, 0]} 
+                  animationDuration={1000} 
+                  animationEasing="ease-out" 
+                  maxBarSize={40} 
+                />
+                
+                <Bar 
+                  dataKey="out" 
+                  name="out" 
+                  fill="url(#bronzeGrad)"
+                  radius={[4, 4, 0, 0]} 
+                  animationDuration={1000} 
+                  animationEasing="ease-out" 
+                  animationBegin={200} 
+                  maxBarSize={40} 
+                />
               </BarChart>
             </ResponsiveContainer>
           )}
