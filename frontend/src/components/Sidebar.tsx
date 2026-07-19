@@ -13,6 +13,7 @@ import {
   Menu,
   Coins,
   LogOut,
+  FolderUp,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -23,10 +24,11 @@ export const Sidebar: React.FC = () => {
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'clientes', name: 'Clientes', icon: Users },
-    { id: 'ingresos', name: 'Ingresos de Oro', icon: ClipboardList },
+    { id: 'ingresos', name: 'Ingresos de Material', icon: ClipboardList },
     { id: 'procesos', name: 'Procesos de Fundición', icon: Flame },
-    { id: 'egresos', name: 'Egresos / Despachos', icon: ArrowLeftRight },
-    { id: 'reportes', name: 'Reportes y Balances', icon: FileText },
+    { id: 'egresos', name: 'Egresos de Material', icon: ArrowLeftRight },
+    { id: 'reportes', name: 'Reportes', icon: FileText },
+    { id: 'packing', name: 'Packing', icon: FolderUp },
   ];
 
   return (
@@ -63,11 +65,11 @@ export const Sidebar: React.FC = () => {
           overflow-hidden"
       >
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 shrink-0 border-b border-[#2F353E] px-3">
-          <div className="flex items-center gap-2.5 min-w-max">
+        <div className="flex items-center h-16 shrink-0 border-b border-[#2F353E] px-3">
+          <div className="flex items-center gap-2.5">
             <Coins className="w-5 h-5 text-[#D5B042] shrink-0" />
             <span className="font-sans font-extrabold text-sm tracking-widest text-[#F1F5F9] whitespace-nowrap opacity-0 lg:group-hover:opacity-100 transition-opacity duration-200">
-              BANDES
+              CONTROL MINING
             </span>
           </div>
         </div>
