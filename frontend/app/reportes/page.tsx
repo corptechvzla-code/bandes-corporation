@@ -14,7 +14,7 @@ import { useClients } from '@/hooks/useClients';
 import { useProcesses } from '@/hooks/useProcesses';
 import { useLots } from '@/hooks/useLots';
 import { useMaterialExits } from '@/hooks/useExits';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, formatWeight } from '@/lib/format';
 
 export default function ReportesPage() {
   const { data: bars = [] } = useBars();
@@ -42,8 +42,8 @@ export default function ReportesPage() {
 
   const oroRecibido = useMemo(() => {
     const totalBarras = filteredBars.length;
-    const pesoBruto = filteredBars.reduce((sum, b) => sum + b.grossWeight, 0);
-    const finoTotal = filteredBars.reduce((sum, b) => sum + b.fineWeight, 0);
+    const pesoBruto = filteredBars.reduce((sum, b) => sum + Number(b.grossWeight || 0), 0);
+    const finoTotal = filteredBars.reduce((sum, b) => sum + Number(b.fineWeight || 0), 0);
     const clientes = new Set(filteredBars.map(b => b.clientId)).size;
     return { totalBarras, pesoBruto, finoTotal, clientes };
   }, [filteredBars]);
@@ -51,10 +51,10 @@ export default function ReportesPage() {
   const oroRefinado = useMemo(() => {
     const closedLots = lots.filter(l => l.recovered != null);
     const completedBars = filteredBars.filter(b => b.status === 'COMPLETADO' || b.status === 'EXITED');
-    const totalRecovered = closedLots.reduce((sum, l) => sum + (l.recovered || 0), 0);
+    const totalRecovered = closedLots.reduce((sum, l) => sum + Number(l.recovered || 0), 0);
     const completedLotIds = new Set(closedLots.map(l => l.id));
     const completedLotsBars = filteredBars.filter(b => b.lotId && completedLotIds.has(b.lotId));
-    const totalExpected = completedLotsBars.reduce((sum, b) => sum + b.fineWeight, 0);
+    const totalExpected = completedLotsBars.reduce((sum, b) => sum + Number(b.fineWeight || 0), 0);
     const eficiencia = totalExpected > 0 ? (totalRecovered / totalExpected) * 100 : 0;
     const enProceso = processes.filter(p => p.status === 'OPEN');
     return {
@@ -69,8 +69,8 @@ export default function ReportesPage() {
 
   const oroEnEspera = useMemo(() => {
     const waiting = filteredBars.filter(b => b.status === 'IN_STOCK');
-    const pesoBruto = waiting.reduce((sum, b) => sum + b.grossWeight, 0);
-    const finoTotal = waiting.reduce((sum, b) => sum + b.fineWeight, 0);
+    const pesoBruto = waiting.reduce((sum, b) => sum + Number(b.grossWeight || 0), 0);
+    const finoTotal = waiting.reduce((sum, b) => sum + Number(b.fineWeight || 0), 0);
     const clientes = new Set(waiting.map(b => b.clientId)).size;
     return { count: waiting.length, pesoBruto, finoTotal, clientes };
   }, [filteredBars]);
@@ -80,8 +80,8 @@ export default function ReportesPage() {
     filteredBars.forEach(b => {
       const clientName = clients.find(c => c.id === b.clientId)?.name || 'Desconocido';
       const entry = map.get(b.clientId) || { name: clientName, received: 0, delivered: 0 };
-      entry.received += b.fineWeight;
-      if (b.status === 'EXITED') entry.delivered += b.fineWeight;
+      entry.received += Number(b.fineWeight || 0);
+      if (b.status === 'EXITED') entry.delivered += Number(b.fineWeight || 0);
       map.set(b.clientId, entry);
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -191,9 +191,9 @@ export default function ReportesPage() {
           <div className="space-y-0.5 min-w-0">
             <strong 
               className="text-2xl sm:text-3xl font-mono font-bold text-[#E5E5E5] block truncate"
-              title={(oroRecibido.pesoBruto / 1000).toFixed(4)}
+              title={formatNumber(oroRecibido.pesoBruto / 1000, 4)}
             >
-              {(oroRecibido.pesoBruto / 1000).toFixed(4)}
+              {formatNumber(oroRecibido.pesoBruto / 1000, 4)}
             </strong>
             <span className="text-[10px] font-mono text-[#8C8C8C] block truncate">kg Peso Bruto Total</span>
           </div>
@@ -210,10 +210,10 @@ export default function ReportesPage() {
             <div className="col-span-2 min-w-0">
               <span 
                 className="text-[9px] font-mono text-[#8C8C8C] block truncate"
-                title={`Fino total: ${(oroRecibido.finoTotal / 1000).toFixed(4)} kg Au`}
+                title={`FA (Fino Analítico): ${formatWeight(oroRecibido.finoTotal / 1000, 4)}`}
               >
-                Fino total:{' '}
-                <strong className="text-[#E5E5E5]">{(oroRecibido.finoTotal / 1000).toFixed(4)} kg Au</strong>
+                FA (Fino Analítico):{' '}
+                <strong className="text-[#E5E5E5]">{formatWeight(oroRecibido.finoTotal / 1000, 4)}</strong>
               </span>
             </div>
           </div>
@@ -254,11 +254,11 @@ export default function ReportesPage() {
           <div className="space-y-0.5 min-w-0">
             <strong 
               className="text-2xl sm:text-3xl font-mono font-bold text-[#E5E5E5] block truncate"
-              title={(oroRefinado.totalRecovered / 1000).toFixed(4)}
+              title={formatNumber(oroRefinado.totalRecovered / 1000, 4)}
             >
-              {(oroRefinado.totalRecovered / 1000).toFixed(4)}
+              {formatNumber(oroRefinado.totalRecovered / 1000, 4)}
             </strong>
-            <span className="text-[10px] font-mono text-[#8C8C8C] block truncate">kg Au Recuperado</span>
+            <span className="text-[10px] font-mono text-[#8C8C8C] block truncate">R (Recuperado)</span>
           </div>
 
           <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-neutral-800/20">
@@ -272,12 +272,16 @@ export default function ReportesPage() {
             </div>
             <div className="min-w-0">
               <span className={`text-xs font-mono font-bold block truncate ${oroRefinado.eficiencia >= 99 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {oroRefinado.eficiencia.toFixed(1)}%
+                {formatNumber(oroRefinado.eficiencia, 1)}%
               </span>
               <span className="text-[9px] text-[#8C8C8C]/50 block truncate">Eficiencia</span>
             </div>
           </div>
 
+          <div className="flex items-center justify-between text-[9px] font-mono text-[#8C8C8C] bg-neutral-900/50 px-2 py-1 rounded border border-neutral-800/20">
+            <span>FE (Fino Esperado): <strong className="text-[#D5B042]">{formatWeight(oroRefinado.totalExpected * 0.99 / 1000, 4)}</strong></span>
+            <span className="text-[7px] text-[#8C8C8C]/50">FA × 0,99</span>
+          </div>
           {oroRefinado.enProcesoCount > 0 && (
             <div className="flex items-center gap-1 text-[9px] font-mono text-amber-500 bg-amber-950/20 px-2 py-0.5 rounded border border-amber-500/10 min-w-0">
               <RefreshCw className="w-2.5 h-2.5 animate-spin shrink-0" />
@@ -321,9 +325,9 @@ export default function ReportesPage() {
           <div className="space-y-0.5 min-w-0">
             <strong 
               className="text-2xl sm:text-3xl font-mono font-bold text-[#E5E5E5] block truncate"
-              title={(oroEnEspera.pesoBruto / 1000).toFixed(4)}
+              title={formatNumber(oroEnEspera.pesoBruto / 1000, 4)}
             >
-              {(oroEnEspera.pesoBruto / 1000).toFixed(4)}
+              {formatNumber(oroEnEspera.pesoBruto / 1000, 4)}
             </strong>
             <span className="text-[10px] font-mono text-[#8C8C8C] block truncate">kg Peso Bruto en Bóveda</span>
           </div>
@@ -340,11 +344,11 @@ export default function ReportesPage() {
             <div className="min-w-0">
               <span 
                 className="text-xs font-mono font-bold text-[#E5E5E5] block truncate"
-                title={(oroEnEspera.finoTotal / 1000).toFixed(4)}
+                title={formatWeight(oroEnEspera.finoTotal / 1000, 4)}
               >
-                {(oroEnEspera.finoTotal / 1000).toFixed(4)}
+                {formatWeight(oroEnEspera.finoTotal / 1000, 4)}
               </span>
-              <span className="text-[9px] text-[#8C8C8C]/50 block truncate">kg Au Fino</span>
+              <span className="text-[9px] text-[#8C8C8C]/50 block truncate">FA (Fino Analítico)</span>
             </div>
           </div>
         </motion.div>
@@ -392,9 +396,9 @@ export default function ReportesPage() {
               <thead>
                 <tr className="border-b border-neutral-800/40 text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider">
                   <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4 text-right">Recibido (kg Au)</th>
-                  <th className="py-3 px-4 text-right">Entregado (kg Au)</th>
-                  <th className="py-3 px-4 text-right">Balance (kg Au)</th>
+                  <th className="py-3 px-4 text-right">FA (kg)</th>
+                  <th className="py-3 px-4 text-right">Entregado (kg)</th>
+                  <th className="py-3 px-4 text-right">Balance (kg)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/20 text-xs font-sans text-[#E5E5E5]">
@@ -407,15 +411,15 @@ export default function ReportesPage() {
                         {cliente.name}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400">
-                        {(cliente.received / 1000).toFixed(3)}
+                        {formatNumber(cliente.received / 1000, 3)}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-400">
-                        {(cliente.delivered / 1000).toFixed(3)}
+                        {formatNumber(cliente.delivered / 1000, 3)}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <span className={`inline-flex items-center gap-1 font-mono font-bold text-sm ${balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           <ArrowUpRight className={`w-3 h-3 ${balance >= 0 ? '' : 'rotate-180'}`} />
-                          {balance >= 0 ? '+' : ''}{(balance / 1000).toFixed(3)}
+                          {balance >= 0 ? '+' : ''}{formatNumber(balance / 1000, 3)}
                         </span>
                       </td>
                     </tr>

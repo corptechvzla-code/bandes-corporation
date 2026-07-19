@@ -638,7 +638,7 @@ export default function IngresosPage() {
                                 <th className="py-3 text-center bg-black/50">BRUTO</th>
                                 <th className="py-3 text-center bg-black/50">FA</th>
                                 <th className="py-3 text-center bg-black/50">R</th>
-                                <th className="py-3 text-center bg-black/50">VERIFICADO</th>
+                                <th className="py-3 text-center bg-black/50">STATUS</th>
                                 <th className="py-3 text-center bg-black/50">Estado</th>
                                 <th className="py-3 text-center bg-black/50 w-20">Acciones</th>
                               </tr>

@@ -24,11 +24,11 @@ export const Sidebar: React.FC = () => {
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'clientes', name: 'Clientes', icon: Users },
+    { id: 'packing', name: 'Packing', icon: FolderUp },
     { id: 'ingresos', name: 'Ingresos de Material', icon: ClipboardList },
     { id: 'procesos', name: 'Procesos de Fundición', icon: Flame },
     { id: 'egresos', name: 'Egresos de Material', icon: ArrowLeftRight },
     { id: 'reportes', name: 'Reportes', icon: FileText },
-    { id: 'packing', name: 'Packing', icon: FolderUp },
   ];
 
   return (
