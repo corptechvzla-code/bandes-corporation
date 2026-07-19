@@ -6,10 +6,9 @@ import { useBars } from '@/hooks/useBars';
 import { useMaterialExits } from '@/hooks/useExits';
 import { useClients } from '@/hooks/useClients';
 import { useLots } from '@/hooks/useLots';
-import { formatNumber } from '@/lib/format';
 import {
-  Flame, ClipboardList, CheckCircle2, TrendingUp, TrendingDown, Scale,
-  Clock, ArrowUpRight, Sparkles, Coins, ArrowLeftRight, ChevronDown, ChevronUp, Table2,
+  Flame, ClipboardList, Clock, Scale, Coins, Sparkles, TrendingDown,
+  ChevronDown, ChevronUp, Table2, ArrowUpRight
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
@@ -59,16 +58,30 @@ export default function DashboardPage() {
   const [showSupplierTable, setShowSupplierTable] = useState<boolean>(false);
   const [showClientTable, setShowClientTable] = useState<boolean>(false);
 
-  const inStockBars = bars.filter(b => b.status === 'IN_STOCK');
-  const todayBarsCount = inStockBars.length;
-  const todayBarsWeight = inStockBars.reduce((s, b) => s + Number(b.grossWeight), 0);
+  // --- CÁLCULOS PARA LOS CONTADORES NUEVOS ---
 
-  const exitedWeight = bars.filter(b => b.status === 'EXITED').reduce((s, b) => s + Number(b.fineWeight), 0);
+  // 1. Oro Recibido (Todas las barras registradas)
+  const totalReceivedWeight = bars.reduce((s, b) => s + Number(b.grossWeight), 0);
+  const totalReceivedCount = bars.length;
 
-  const totalFA = bars.reduce((s, b) => s + Number(b.fineWeight), 0);
+  // 2. Oro Refundido (Suma recuperada de procesos con fundición)
   const totalRecovered = lots.filter(l => l.recovered != null).reduce((s, l) => s + Number(l.recovered), 0);
+  const processedLotsCount = lots.filter(l => l.recovered != null).length;
+
+  // 3. Oro en Espera por Proceso (Barras IN_STOCK en bóveda)
+  const inStockBars = bars.filter(b => b.status === 'IN_STOCK');
+  const inStockCount = inStockBars.length;
+  const inStockWeight = inStockBars.reduce((s, b) => s + Number(b.grossWeight), 0);
+
+  // 4. Merma
+  const totalFA = bars.reduce((s, b) => s + Number(b.fineWeight), 0);
   const mermaG = Math.max(0, totalFA - totalRecovered);
   const mermaPct = totalFA > 0 ? (mermaG / totalFA) * 100 : 0;
+
+  // Excedente de egresos (para mantener compatibilidad si se usa abajo)
+  const exitedWeight = bars.filter(b => b.status === 'EXITED').reduce((s, b) => s + Number(b.fineWeight), 0);
+
+  // --- FIN DE NUEVOS CÁLCULOS ---
 
   const supplierData = clients.map(c => {
     const cBars = bars.filter(b => b.clientId === c.id);
@@ -159,7 +172,7 @@ export default function DashboardPage() {
         </svg>
         <AnimatePresence>{hovered && (
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-            className={`absolute top-2 left-2 z-20 bg-[#1C1C1C] border-l-4 ${isSupplier ? 'border-[#D5B042]' : 'border-[#A65B17]'} border-y border-r border-neutral-800/40 p-3 rounded shadow-[0_4px_12px_rgba(0,0,0,0.6)] backdrop-blur-xs max-w-xs`}>
+            className={`absolute top-2 left-2 z-20 bg-[#161619] border-l-4 ${isSupplier ? 'border-[#D5B042]' : 'border-[#A65B17]'} border-y border-r border-neutral-800/40 p-3 rounded shadow-[0_4px_12px_rgba(0,0,0,0.6)] backdrop-blur-xs max-w-xs`}>
             <h4 className="text-xs font-bold text-[#E5E5E5] tracking-wide uppercase">{hovered.name}</h4>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-[11px] font-mono">
               <span className="text-[#8C8C8C]">{isSupplier ? 'Total Ingresado:' : 'Total Despachado:'}</span>
@@ -175,73 +188,80 @@ export default function DashboardPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="space-y-8">
+      
+      {/* SECCIÓN DE CONTADORES ACTUALIZADOS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        
+        {/* Tarjeta 1: Oro recibido */}
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#D5B042]/5 to-transparent rounded-bl-full pointer-events-none"></div>
           <div className="flex justify-between items-center mb-3">
             <div className="p-2 bg-black rounded-lg border border-[#D5B042]/20"><ClipboardList className="w-5 h-5 text-[#D5B042]" /></div>
-            <span className="text-[9px] text-[#D5B042] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#D5B042]/20"><TrendingUp className="w-2.5 h-2.5" /> REGISTRO</span>
+            <span className="text-[9px] text-[#D5B042] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#D5B042]/20">REGISTRO</span>
           </div>
           <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Barras en Bóveda (IN_STOCK)</span>
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Oro recibido</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{todayBarsCount}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">Unidades</span>
+              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(totalReceivedWeight / 1000).toFixed(3)}</span>
+              <span className="text-[10.5px] text-[#8C8C8C]">kg</span>
             </div>
             <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Scale className="w-3 h-3 text-[#D5B042]" />Peso Total Bruto: <strong className="text-[#E5E5E5]">{(todayBarsWeight / 1000).toFixed(2)} kg</strong>
+              <Scale className="w-3 h-3 text-[#D5B042]" />Barras totales: <strong className="text-[#E5E5E5]">{totalReceivedCount} u</strong>
             </p>
           </div>
         </motion.div>
 
+        {/* Tarjeta 2: Oro refundido */}
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#A65B17]/5 to-transparent rounded-bl-full pointer-events-none"></div>
           <div className="flex justify-between items-center mb-3">
             <div className="p-2 bg-black rounded-lg border border-[#A65B17]/20"><Flame className="w-5 h-5 text-[#A65B17] animate-pulse" /></div>
-            <span className="text-[9px] text-[#A65B17] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#A65B17]/20"><Clock className="w-2.5 h-2.5 animate-spin" style={{ animationDuration: '6s' }} /> FUNDICIÓN</span>
+            <span className="text-[9px] text-[#A65B17] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#A65B17]/20">FUNDICIÓN</span>
           </div>
           <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Total Clientes Registrados</span>
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Oro refundido</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{clients.length}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">Clientes</span>
-            </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Sparkles className="w-3 h-3 text-[#A65B17]" />Barras totales: <strong className="text-[#E5E5E5]">{bars.length} u</strong>
-            </p>
-          </div>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-emerald-500/30">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
-          <div className="flex justify-between items-center mb-3">
-            <div className="p-2 bg-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-5 h-5 text-emerald-500" /></div>
-            <span className="text-[9px] text-emerald-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-emerald-500/10">✓ EGRESOS</span>
-          </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Total Egresado (Peso Fino)</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(exitedWeight / 1000).toFixed(3)}</span>
+              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(totalRecovered / 1000).toFixed(3)}</span>
               <span className="text-[10.5px] text-[#8C8C8C]">kg Au</span>
             </div>
             <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <ArrowUpRight className="w-3 h-3 text-emerald-400" />Operaciones de Salida: <strong className="text-[#E5E5E5]">{exits.length}</strong>
+              <Sparkles className="w-3 h-3 text-[#A65B17]" />Lotes procesados: <strong className="text-[#E5E5E5]">{processedLotsCount} u</strong>
             </p>
           </div>
         </motion.div>
 
+        {/* Tarjeta 3: Oro en espera por proceso */}
+        <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28, duration: 0.55 }}
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-emerald-500/30">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="p-2 bg-black rounded-lg border border-emerald-500/20"><Clock className="w-5 h-5 text-emerald-500" /></div>
+            <span className="text-[9px] text-emerald-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-emerald-500/10">BÓVEDA</span>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Oro en espera por proceso</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(inStockWeight / 1000).toFixed(3)}</span>
+              <span className="text-[10.5px] text-[#8C8C8C]">kg</span>
+            </div>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
+              <ArrowUpRight className="w-3 h-3 text-emerald-400" />Barras en stock: <strong className="text-[#E5E5E5]">{inStockCount} u</strong>
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Tarjeta 4: Merma */}
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-red-500/30">
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-red-500/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-red-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
           <div className="flex justify-between items-center mb-3">
             <div className="p-2 bg-black rounded-lg border border-red-500/20"><TrendingDown className="w-5 h-5 text-red-400" /></div>
-            <span className="text-[9px] text-red-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-red-500/10">⚙ MERMA</span>
+            <span className="text-[9px] text-red-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-red-500/10">MERMA</span>
           </div>
           <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Merma de Fundición (FA - R)</span>
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Merma</span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{mermaPct.toFixed(1)}<span className="text-lg">%</span></span>
               <span className="text-[10.5px] text-[#8C8C8C]">Merma</span>
@@ -255,7 +275,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.5 }}
-          className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
+          className="bg-[#161619] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-6">
             <div>
               <h3 className="font-sans font-semibold text-[#E5E5E5] text-base">Ingresos de Clientes (Proporción de Masa)</h3>
@@ -315,7 +335,7 @@ export default function DashboardPage() {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.52, duration: 0.5 }}
-          className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
+          className="bg-[#161619] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-6">
             <div>
               <h3 className="font-sans font-semibold text-[#E5E5E5] text-base">Egresos por Cliente</h3>
@@ -372,7 +392,7 @@ export default function DashboardPage() {
       </div>
 
       <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}
-        className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
+        className="bg-[#161619] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
         <div className="flex items-center justify-between mb-4 border-b border-neutral-800/20 pb-3">
           <div>
             <h3 className="font-sans font-semibold text-[#E5E5E5] text-base">Flujo de Trazabilidad</h3>
