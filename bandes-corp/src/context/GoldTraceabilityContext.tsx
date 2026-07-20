@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Supplier, GoldBar, CastingLot, Transaction } from '../types';
-import type { WeightUnit } from '../lib/format';
 
 interface GoldTraceabilityContextType {
   suppliers: Supplier[];
@@ -8,15 +7,14 @@ interface GoldTraceabilityContextType {
   castingLots: CastingLot[];
   transactions: Transaction[];
   addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
-  addGoldBar: (bar: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>) => { success: boolean; error?: string };
-  addGoldBarsBulk: (bars: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>[]) => { success: boolean; addedCount: number; error?: string };
+  addGoldBar: (bar: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'verificationStatus' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>) => { success: boolean; error?: string };
+  addGoldBarsBulk: (bars: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'verificationStatus' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>[]) => { success: boolean; addedCount: number; error?: string };
   deleteGoldBar: (code: string) => void;
+  updateGoldBar: (code: string, grossWeight: number, ley: number, leyAg: number) => { success: boolean; error?: string };
   createCastingLot: (barCodes: string[], moldCode: string, operator: string) => { success: boolean; lotId?: string; error?: string };
-  completeCastingLot: (lotId: string, recoveredWeight: number) => { success: boolean; error?: string };
-  createEgreso: (clientId: string, selectedLotIds: string[], reference: string, customWeights?: Record<string, number>) => { success: boolean; error?: string };
+  completeCastingLot: (lotId: string, recoveredWeight: number, recoveredLey?: number | null, recoveredLeyAg?: number | null) => { success: boolean; error?: string };
+  createEgreso: (clientId: string, selectedLotIds: string[], reference: string, customWeights?: Record<string, number>) => { success: boolean; error?: string; transaction?: Transaction };
   resetData: () => void;
-  weightUnit: WeightUnit;
-  toggleUnit: () => void;
 }
 
 const GoldTraceabilityContext = createContext<GoldTraceabilityContextType | undefined>(undefined);
@@ -27,13 +25,13 @@ const INITIAL_SUPPLIERS: Supplier[] = [
   { id: 'SUP-03', name: 'Consorcio Metalúrgico Bolívar', code: 'CMB', location: 'Ciudad Guayana', status: 'ACTIVE' },
   { id: 'SUP-04', name: 'Metales Nobles del Sur', code: 'MNS', location: 'Arequipa, Chala', status: 'ACTIVE' },
   { id: 'SUP-05', name: 'Corporación Aurífera Caroní', code: 'CAC', location: 'Upata, Bolívar', status: 'ACTIVE' },
-  { id: 'SUP-06', name: 'Centro de Fundición Andino', code: 'CFA', location: 'Mérida, Andes', status: 'ACTIVE' },
+  { id: 'SUP-06', name: 'Refinería Andina de Oro', code: 'RAO', location: 'Mérida, Andes', status: 'ACTIVE' },
   { id: 'SUP-07', name: 'Auríferos de Yuruari', code: 'ADY', location: 'El Callao, Bolívar', status: 'ACTIVE' },
   { id: 'SUP-08', name: 'Preciosos de Guayana', code: 'PDG', location: 'Sifontes, Tumeremo', status: 'ACTIVE' },
 ];
 
 const INITIAL_GOLD_BARS: GoldBar[] = [
-  // AVAILABLE (INGRESADOS)
+  // AVAILABLE (CONFIRMADOS)
   {
     code: 'BAR-IAC-9402',
     supplierId: 'SUP-01',
@@ -45,7 +43,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 42,
     analyticalAg: 147,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -62,7 +61,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 55,
     analyticalAg: 231,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -79,7 +79,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 30,
     analyticalAg: 753,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -96,7 +97,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 65,
     analyticalAg: 78,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -113,7 +115,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 45,
     analyticalAg: 243,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -130,7 +133,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 38,
     analyticalAg: 235.6,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -147,7 +151,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 52,
     analyticalAg: 473.2,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -164,7 +169,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 48,
     analyticalAg: 499.2,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -181,7 +187,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 30,
     analyticalAg: 462,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -198,7 +205,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 32,
     analyticalAg: 387.2,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -215,7 +223,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 45,
     analyticalAg: 400.5,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -232,7 +241,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 40,
     analyticalAg: 568,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -249,7 +259,8 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     leyAg: 35,
     analyticalAg: 388.5,
     available: true,
-    status: 'INGRESADO',
+    status: 'CONFIRMADO',
+    verificationStatus: 'VERIFICADO',
     processId: null,
     egresadoG: 0,
     egresoId: null,
@@ -268,6 +279,7 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     analyticalAg: 375,
     available: false,
     status: 'PROCESANDO',
+    verificationStatus: 'VERIFICADO',
     processId: 'LOT-101',
     egresadoG: 0,
     egresoId: null,
@@ -285,6 +297,7 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     analyticalAg: 440,
     available: false,
     status: 'PROCESANDO',
+    verificationStatus: 'VERIFICADO',
     processId: 'LOT-101',
     egresadoG: 0,
     egresoId: null,
@@ -298,11 +311,12 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     ley: 840,
     analytical: 1512,
     expected: 1496.88,
-    recovered: 1610.2, // portion of recovered gold attributed
+    recovered: 1610.2,
     leyAg: 70,
     analyticalAg: 126,
     available: false,
     status: 'COMPLETADO',
+    verificationStatus: 'VERIFICADO',
     processId: 'LOT-102',
     egresadoG: 0,
     egresoId: null,
@@ -315,11 +329,12 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     ley: 950,
     analytical: 2375,
     expected: 2351.25,
-    recovered: 2530.3, // portion of recovered gold attributed
+    recovered: 2530.3,
     leyAg: 20,
     analyticalAg: 50,
     available: false,
     status: 'COMPLETADO',
+    verificationStatus: 'VERIFICADO',
     processId: 'LOT-102',
     egresadoG: 0,
     egresoId: null,
@@ -338,6 +353,7 @@ const INITIAL_GOLD_BARS: GoldBar[] = [
     analyticalAg: 12.4,
     available: false,
     status: 'EGRESADO',
+    verificationStatus: 'VERIFICADO',
     processId: 'LOT-103',
     egresadoG: 6112.2,
     egresoId: 'TX-401',
@@ -356,6 +372,8 @@ const INITIAL_LOTS: CastingLot[] = [
     analyticalTotal: 21352.5,
     expectedTotal: 21138.98,
     recovered: null,
+    recoveredLey: null,
+    recoveredLeyAg: null,
     operator: 'Ing. Carlos Mendoza',
     castingTemp: 1085,
     moldCode: 'CRISOL-04',
@@ -370,6 +388,8 @@ const INITIAL_LOTS: CastingLot[] = [
     analyticalTotal: 3887,
     expectedTotal: 3848.13,
     recovered: 4140.5, // 4,140.5g of pure gold recovered
+    recoveredLey: 992,
+    recoveredLeyAg: 5,
     operator: 'Ing. Sofía Vergara',
     castingTemp: 1072,
     moldCode: 'CRISOL-07',
@@ -384,6 +404,8 @@ const INITIAL_LOTS: CastingLot[] = [
     analyticalTotal: 6169,
     expectedTotal: 6107.31,
     recovered: 6112.2,
+    recoveredLey: 995,
+    recoveredLeyAg: 2,
     operator: 'Ing. Carlos Mendoza',
     castingTemp: 1090,
     moldCode: 'CRISOL-01',
@@ -430,7 +452,7 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
   {
     id: 'TX-304',
     type: 'IN',
-    clientName: 'Centro de Fundición Andino',
+    clientName: 'Refinería Andina de Oro',
     clientId: 'SUP-06',
     weight: 11600,
     barsCount: 2,
@@ -518,7 +540,7 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
   {
     id: 'TX-405',
     type: 'OUT',
-    clientName: 'Centro de Fundición Andino',
+    clientName: 'Refinería Andina de Oro',
     clientId: 'SUP-06',
     weight: 6000.0,
     barsCount: 0,
@@ -546,65 +568,51 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
 export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
     if (typeof window === 'undefined') return INITIAL_SUPPLIERS;
-    const version = localStorage.getItem('bandes_version_v4');
+    const version = localStorage.getItem('cm_version_v4');
     if (version !== 'v4') {
-      localStorage.setItem('bandes_version_v4', 'v4');
-      localStorage.setItem('bandes_suppliers', JSON.stringify(INITIAL_SUPPLIERS));
-      localStorage.setItem('bandes_gold_bars', JSON.stringify(INITIAL_GOLD_BARS));
-      localStorage.setItem('bandes_casting_lots', JSON.stringify(INITIAL_LOTS));
-      localStorage.setItem('bandes_transactions', JSON.stringify(INITIAL_TRANSACTIONS));
+      localStorage.setItem('cm_version_v4', 'v4');
+      localStorage.setItem('cm_suppliers', JSON.stringify(INITIAL_SUPPLIERS));
+      localStorage.setItem('cm_gold_bars', JSON.stringify(INITIAL_GOLD_BARS));
+      localStorage.setItem('cm_casting_lots', JSON.stringify(INITIAL_LOTS));
+      localStorage.setItem('cm_transactions', JSON.stringify(INITIAL_TRANSACTIONS));
       return INITIAL_SUPPLIERS;
     }
-    const saved = localStorage.getItem('bandes_suppliers');
+    const saved = localStorage.getItem('cm_suppliers');
     return saved ? JSON.parse(saved) : INITIAL_SUPPLIERS;
   });
 
   const [goldBars, setGoldBars] = useState<GoldBar[]>(() => {
     if (typeof window === 'undefined') return INITIAL_GOLD_BARS;
-    const saved = localStorage.getItem('bandes_gold_bars');
+    const saved = localStorage.getItem('cm_gold_bars');
     return saved ? JSON.parse(saved) : INITIAL_GOLD_BARS;
   });
 
   const [castingLots, setCastingLots] = useState<CastingLot[]>(() => {
     if (typeof window === 'undefined') return INITIAL_LOTS;
-    const saved = localStorage.getItem('bandes_casting_lots');
+    const saved = localStorage.getItem('cm_casting_lots');
     return saved ? JSON.parse(saved) : INITIAL_LOTS;
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     if (typeof window === 'undefined') return INITIAL_TRANSACTIONS;
-    const saved = localStorage.getItem('bandes_transactions');
+    const saved = localStorage.getItem('cm_transactions');
     return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
   });
 
-  const [weightUnit, setWeightUnit] = useState<WeightUnit>(() => {
-    if (typeof window === 'undefined') return 'kg';
-    const saved = localStorage.getItem('bandes_weight_unit');
-    return saved === 'g' ? 'g' : 'kg';
-  });
-
-  const toggleUnit = useCallback(() => {
-    setWeightUnit(prev => {
-      const next = prev === 'kg' ? 'g' : 'kg';
-      if (typeof window !== 'undefined') localStorage.setItem('bandes_weight_unit', next);
-      return next;
-    });
-  }, []);
-
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem('bandes_suppliers', JSON.stringify(suppliers));
+    if (typeof window !== 'undefined') localStorage.setItem('cm_suppliers', JSON.stringify(suppliers));
   }, [suppliers]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem('bandes_gold_bars', JSON.stringify(goldBars));
+    if (typeof window !== 'undefined') localStorage.setItem('cm_gold_bars', JSON.stringify(goldBars));
   }, [goldBars]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem('bandes_casting_lots', JSON.stringify(castingLots));
+    if (typeof window !== 'undefined') localStorage.setItem('cm_casting_lots', JSON.stringify(castingLots));
   }, [castingLots]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem('bandes_transactions', JSON.stringify(transactions));
+    if (typeof window !== 'undefined') localStorage.setItem('cm_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
   const addSupplier = (supplierData: Omit<Supplier, 'id'>) => {
@@ -616,7 +624,7 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
     setSuppliers((prev) => [...prev, newSupplier]);
   };
 
-  const addGoldBar = (barData: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>) => {
+  const addGoldBar = (barData: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'verificationStatus' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>) => {
     // Check if code is unique (case insensitive)
     const upperCode = barData.code.toUpperCase();
     if (goldBars.some((b) => b.code.toUpperCase() === upperCode)) {
@@ -635,7 +643,8 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
       analyticalAg: Number(FinoAg.toFixed(2)),
       recovered: null,
       available: true,
-      status: 'INGRESADO',
+      status: 'CONFIRMADO',
+      verificationStatus: 'VERIFICADO',
       processId: null,
       egresadoG: 0,
       egresoId: null,
@@ -664,7 +673,7 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
     return { success: true };
   };
 
-  const addGoldBarsBulk = (barsData: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>[]) => {
+  const addGoldBarsBulk = (barsData: Omit<GoldBar, 'analytical' | 'expected' | 'analyticalAg' | 'status' | 'verificationStatus' | 'available' | 'processId' | 'egresadoG' | 'egresoId' | 'createdAt' | 'recovered'>[]) => {
     const added: GoldBar[] = [];
     const duplicates: string[] = [];
 
@@ -689,7 +698,8 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
           analyticalAg: Number(FinoAg.toFixed(2)),
           recovered: null,
           available: true,
-          status: 'INGRESADO',
+          status: 'POR_CONFIRMAR',
+          verificationStatus: 'POR_VERIFICAR',
           processId: null,
           egresadoG: 0,
           egresoId: null,
@@ -756,6 +766,62 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
     );
   };
 
+  const updateGoldBar = (code: string, grossWeight: number, ley: number, leyAg: number) => {
+    const bar = goldBars.find((b) => b.code === code);
+    if (!bar) {
+      return { success: false, error: 'Barra no encontrada.' };
+    }
+    if (bar.status !== 'CONFIRMADO' && bar.status !== 'POR_CONFIRMAR') {
+      return { success: false, error: 'Solo se pueden editar barras en estado CONFIRMADO o POR CONFIRMAR.' };
+    }
+
+    const FA = grossWeight * (ley / 1000);
+    const FE = FA * 0.99;
+    const FinoAg = grossWeight * (leyAg / 1000);
+    const newStatus = bar.status === 'POR_CONFIRMAR' ? 'CONFIRMADO' : bar.status;
+    const newVerificationStatus = bar.verificationStatus === 'POR_VERIFICAR' ? 'VERIFICADO' : bar.verificationStatus;
+
+    setGoldBars((prev) =>
+      prev.map((b) => {
+        if (b.code === code) {
+          return {
+            ...b,
+            grossWeight,
+            ley,
+            leyAg,
+            analytical: Number(FA.toFixed(2)),
+            expected: Number(FE.toFixed(2)),
+            analyticalAg: Number(FinoAg.toFixed(2)),
+            status: newStatus,
+            verificationStatus: newVerificationStatus,
+          };
+        }
+        return b;
+      })
+    );
+
+    // Update casting lot totals if this bar belongs to one
+    setCastingLots((prev) =>
+      prev.map((lot) => {
+        if (lot.barCodes.includes(code)) {
+          const lotBars = goldBars.map((b) => {
+            if (b.code === code) {
+              return { ...b, grossWeight, ley, leyAg, analytical: Number(FA.toFixed(2)), expected: Number(FE.toFixed(2)), analyticalAg: Number(FinoAg.toFixed(2)) };
+            }
+            return b;
+          }).filter((b) => lot.barCodes.includes(b.code));
+          const grossWeightTotal = lotBars.reduce((sum, b) => sum + b.grossWeight, 0);
+          const analyticalTotal = lotBars.reduce((sum, b) => sum + b.analytical, 0);
+          const expectedTotal = lotBars.reduce((sum, b) => sum + b.expected, 0);
+          return { ...lot, grossWeightTotal, analyticalTotal, expectedTotal };
+        }
+        return lot;
+      })
+    );
+
+    return { success: true };
+  };
+
   const createCastingLot = (barCodes: string[], moldCode: string, operator: string) => {
     if (barCodes.length === 0) {
       return { success: false, error: 'Debe seleccionar al menos una barra de oro.' };
@@ -788,6 +854,8 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
       analyticalTotal: Number(analyticalTotal.toFixed(2)),
       expectedTotal: Number(expectedTotal.toFixed(2)),
       recovered: null,
+      recoveredLey: null,
+      recoveredLeyAg: null,
       operator,
       castingTemp: 1064 + Math.floor(Math.random() * 40), // around melting point of gold 1064 Celsius
       moldCode: moldCode.toUpperCase(),
@@ -813,7 +881,7 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
     return { success: true, lotId };
   };
 
-  const completeCastingLot = (lotId: string, recoveredWeight: number) => {
+  const completeCastingLot = (lotId: string, recoveredWeight: number, recoveredLey?: number | null, recoveredLeyAg?: number | null) => {
     const lot = castingLots.find((l) => l.id === lotId);
     if (!lot) {
       return { success: false, error: 'No se encontró el lote de fundición.' };
@@ -827,6 +895,8 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
             ...l,
             status: 'COMPLETADO',
             recovered: recoveredWeight,
+            recoveredLey: recoveredLey ?? null,
+            recoveredLeyAg: recoveredLeyAg ?? null,
           };
         }
         return l;
@@ -926,7 +996,7 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
 
     setTransactions((prev) => [newTx, ...prev]);
 
-    return { success: true };
+    return { success: true, transaction: newTx };
   };
 
   const resetData = () => {
@@ -934,10 +1004,10 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
     setGoldBars(INITIAL_GOLD_BARS);
     setCastingLots(INITIAL_LOTS);
     setTransactions(INITIAL_TRANSACTIONS);
-    localStorage.removeItem('bandes_suppliers');
-    localStorage.removeItem('bandes_gold_bars');
-    localStorage.removeItem('bandes_casting_lots');
-    localStorage.removeItem('bandes_transactions');
+    localStorage.removeItem('cm_suppliers');
+    localStorage.removeItem('cm_gold_bars');
+    localStorage.removeItem('cm_casting_lots');
+    localStorage.removeItem('cm_transactions');
   };
 
   return (
@@ -951,12 +1021,11 @@ export const GoldTraceabilityProvider: React.FC<{ children: React.ReactNode }> =
         addGoldBar,
         addGoldBarsBulk,
         deleteGoldBar,
+        updateGoldBar,
         createCastingLot,
         completeCastingLot,
         createEgreso,
         resetData,
-        weightUnit,
-        toggleUnit,
       }}
     >
       {children}

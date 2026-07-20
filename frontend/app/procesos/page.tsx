@@ -5,17 +5,20 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Flame, Thermometer, User, Clock, Plus, CheckCircle2, Play,
   ChevronRight, Sparkles, Layers, Lock, AlertTriangle, Info,
+  Weight, Microscope,
 } from 'lucide-react';
 import { useClients } from '@/hooks/useClients';
 import { useBars, useUpdateBar } from '@/hooks/useBars';
 import { useProcesses, useCreateProcess, useUpdateProcess } from '@/hooks/useProcesses';
 import { useLots, useCreateLot, useUpdateLot } from '@/hooks/useLots';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, formatWeight } from '@/lib/format';
+import { useGoldTraceability } from '@/context/GoldTraceabilityContext';
 import type { Process, Lot, Bar } from '@/types/api';
 
 export default function ProcesosPage() {
   const { data: bars = [] } = useBars();
   const { data: clients = [] } = useClients();
+  const { weightUnit } = useGoldTraceability();
   const { data: processes = [] } = useProcesses();
   const { data: lots = [] } = useLots();
 
@@ -35,10 +38,12 @@ export default function ProcesosPage() {
   const [batchSuccess, setBatchSuccess] = useState('');
   const [activeLotEl, setActiveLotEl] = useState<Lot | null>(null);
   const [recoveredWeight, setRecoveredWeight] = useState('');
+  const [recoveredLey, setRecoveredLey] = useState('');
+  const [recoveredLeyAg, setRecoveredLeyAg] = useState('');
   const [modalError, setModalError] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const availableBars = useMemo(() => bars.filter(b => b.status === 'IN_STOCK'), [bars]);
+  const availableBars = useMemo(() => bars.filter(b => b.status === 'IN_STOCK' && !b.lotId), [bars]);
 
   const activeProcesses = useMemo(() => processes.filter(p => p.status === 'OPEN'), [processes]);
 
@@ -53,8 +58,8 @@ export default function ProcesosPage() {
 
   const selectedMetrics = useMemo(() => {
     const sel = bars.filter(b => selectedBarIds.includes(b.id));
-    const weight = sel.reduce((s, b) => s + b.grossWeight, 0);
-    const fino = sel.reduce((s, b) => s + b.fineWeight, 0);
+    const weight = sel.reduce((s, b) => s + Number(b.grossWeight), 0);
+    const fino = sel.reduce((s, b) => s + Number(b.fineWeight), 0);
     return { weight, fino, count: sel.length };
   }, [bars, selectedBarIds]);
 
@@ -139,9 +144,11 @@ export default function ProcesosPage() {
 
   const handleOpenRecoveryModal = (lot: Lot) => {
     const lotBars = bars.filter(b => b.lotId === lot.id);
-    const expectedTotal = lotBars.reduce((s, b) => s + b.fineWeight, 0);
+    const expectedTotal = lotBars.reduce((s, b) => s + Number(b.fineWeight), 0);
     setActiveLotEl(lot);
     setRecoveredWeight(expectedTotal.toFixed(2));
+    setRecoveredLey('');
+    setRecoveredLeyAg('');
     setModalError('');
   };
 
@@ -158,11 +165,11 @@ export default function ProcesosPage() {
     }
 
     const lotBars = bars.filter(b => b.lotId === activeLotEl.id);
-    const expectedTotal = lotBars.reduce((s, b) => s + b.fineWeight, 0);
+    const expectedTotal = lotBars.reduce((s, b) => s + Number(b.fineWeight), 0);
     const discrepancy = expectedTotal > 0 ? Math.abs(recWeight - expectedTotal) / expectedTotal : 0;
 
     if (discrepancy > 0.1) {
-      if (!window.confirm(`Discrepancia del ${(discrepancy * 100).toFixed(1)}% detectada con el Fino Esperado (${expectedTotal.toFixed(2)}g). ¿Desea proceder con esta calibración?`)) {
+      if (!window.confirm(`Discrepancia del ${(discrepancy * 100).toFixed(1)}% detectada. ¿Desea proceder con esta calibración?`)) {
         return;
       }
     }
@@ -177,7 +184,7 @@ export default function ProcesosPage() {
         data: { status: 'CLOSED' },
       });
       for (const bar of lotBars) {
-        await updateBar.mutateAsync({ id: bar.id, data: { status: 'COMPLETADO' } });
+        await updateBar.mutateAsync({ id: bar.id, data: { status: 'IN_STOCK' } });
       }
       setActiveLotEl(null);
       setRecoveredWeight('');
@@ -217,10 +224,10 @@ export default function ProcesosPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-sans font-medium text-[#E5E5E5] tracking-tight flex items-center gap-2">
             <Flame className="w-8 h-8 text-[#A65B17] filter drop-shadow-[0_0_8px_rgba(166,91,23,0.3)] animate-pulse" />
-            Monitoreo de Procesos <span className="text-[#D5B042] font-semibold">Fundición y Moldes</span>
+            Monitoreo  <span className="text-[#D5B042] font-semibold">de Procesos</span>
           </h1>
           <p className="text-xs text-[#8C8C8C] mt-1">
-            Supervise el vertido térmico de oro en crisoles a 1,064°C. Agrupe barras, simule enfriamientos incipientes y registre la masa recuperada para la entrega.
+            Agrupe barras y registre la masa recuperada para la entrega.
           </p>
         </div>
 
@@ -356,7 +363,7 @@ export default function ProcesosPage() {
                             <span className="text-[9px] text-[#8C8C8C]/50">{c?.rif.slice(0, 5)} • Ley {bar.purity}‰</span>
                           </div>
                         </div>
-                        <span className="text-[#D5B042] font-semibold">{formatNumber(bar.grossWeight)} g</span>
+                        <span className="text-[#D5B042] font-semibold">{formatWeight(bar.grossWeight, weightUnit)}</span>
                       </label>
                     );
                   })}
@@ -372,11 +379,11 @@ export default function ProcesosPage() {
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-neutral-800/20">
                     <div>
                       <span className="text-[9px] text-[#8C8C8C]/50 uppercase block">Peso Bruto</span>
-                      <strong className="text-[#E5E5E5] text-sm">{formatNumber(selectedMetrics.weight)} g</strong>
+                      <strong className="text-[#E5E5E5] text-sm">{formatWeight(selectedMetrics.weight, weightUnit)}</strong>
                     </div>
                     <div>
                       <span className="text-[9px] text-[#8C8C8C]/50 uppercase block">Fino Au</span>
-                      <strong className="text-[#D5B042] text-sm">{formatNumber(selectedMetrics.fino)} g</strong>
+                      <strong className="text-[#D5B042] text-sm">{formatWeight(selectedMetrics.fino, weightUnit)}</strong>
                     </div>
                   </div>
                 </div>
@@ -520,8 +527,8 @@ export default function ProcesosPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {processLots.map((lot, lotIdx) => {
                                 const lotBars = lotBarsMap[lot.id] || [];
-                                const grossTotal = lotBars.reduce((s, b) => s + b.grossWeight, 0);
-                                const finoTotal = lotBars.reduce((s, b) => s + b.fineWeight, 0);
+                                const grossTotal = lotBars.reduce((s, b) => s + Number(b.grossWeight), 0);
+                                const finoTotal = lotBars.reduce((s, b) => s + Number(b.fineWeight), 0);
 
                                 return (
                                   <motion.div
@@ -550,7 +557,7 @@ export default function ProcesosPage() {
 
                                       <div className="flex items-center justify-between text-[10px] font-mono text-[#8C8C8C]">
                                         <span className="truncate max-w-[120px]">{lot.operator || 'N/A'}</span>
-                                        <span>{formatNumber(grossTotal)}g Bruto</span>
+                                        <span>{formatWeight(grossTotal, weightUnit)} Bruto</span>
                                       </div>
 
                                       <div className="space-y-1.5 bg-neutral-950 p-2.5 rounded-lg border border-neutral-900">
@@ -572,7 +579,7 @@ export default function ProcesosPage() {
                                                   {b.barNumber.split('-').pop() || b.barNumber}
                                                 </span>
                                                 <span className="text-[8px] font-mono text-neutral-400">
-                                                  {formatNumber(b.grossWeight)}g | {b.purity}‰
+                                                  {formatWeight(b.grossWeight, weightUnit)} | {b.purity}‰
                                                 </span>
                                               </div>
                                             ))}
@@ -618,7 +625,7 @@ export default function ProcesosPage() {
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#1C1C1C] border border-neutral-800/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-[0_10px_35px_rgba(0,0,0,0.8)] animate-scale-in">
 
-            <div className="p-6 bg-gradient-to-b from-black/40 to-transparent border-b border-neutral-800/20 flex justify-between items-start">
+            <div className="p-5 bg-gradient-to-b from-black/40 to-transparent border-b border-neutral-800/20 flex justify-between items-start">
               <div>
                 <span className="text-[9px] font-mono text-[#A65B17] bg-[#A65B17]/10 border border-[#A65B17]/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
                   Cierre de Proceso Metalúrgico
@@ -636,45 +643,27 @@ export default function ProcesosPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCompleteCasting} className="p-6 space-y-6">
+            <form onSubmit={handleCompleteCasting} className="p-5 space-y-4">
 
               {(() => {
                 const lotBars = bars.filter(b => b.lotId === activeLotEl.id);
-                const grossTotal = lotBars.reduce((s, b) => s + b.grossWeight, 0);
-                const finoTotal = lotBars.reduce((s, b) => s + b.fineWeight, 0);
+                const grossTotal = lotBars.reduce((s, b) => s + Number(b.grossWeight), 0);
+                const finoTotal = lotBars.reduce((s, b) => s + Number(b.fineWeight), 0);
                 return (
-                  <div className="bg-black p-4 rounded-xl border border-neutral-800/40 space-y-2 text-xs font-mono">
+                  <div className="bg-black p-3 rounded-xl border border-neutral-800/40 space-y-1 text-xs font-mono">
                     <div className="flex justify-between text-[#8C8C8C]">
                       <span>Masa Cargada Bruta:</span>
-                      <span className="text-[#E5E5E5] font-bold">{formatNumber(grossTotal)} g</span>
+                      <span className="text-[#E5E5E5] font-bold">{formatWeight(grossTotal, weightUnit)}</span>
                     </div>
                     <div className="flex justify-between text-[#8C8C8C]">
                       <span>Fino Analítico (FA) Teórico:</span>
-                      <span className="text-[#E5E5E5] font-bold">{formatNumber(finoTotal)} g Au</span>
-                    </div>
-                    <div className="flex justify-between text-[#D5B042] border-t border-neutral-800/20 pt-2 font-bold">
-                      <span>Fino Esperado (FE):</span>
-                      <span>{formatNumber(finoTotal)} g Au</span>
+                      <span className="text-[#E5E5E5] font-bold">{formatWeight(finoTotal, weightUnit)}</span>
                     </div>
                   </div>
                 );
               })()}
 
               <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Masa Final Recuperada (g de Oro Puro)</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const lotBars = bars.filter(b => b.lotId === activeLotEl.id);
-                      const finoTotal = lotBars.reduce((s, b) => s + b.fineWeight, 0);
-                      setRecoveredWeight(finoTotal.toFixed(2));
-                    }}
-                    className="text-[#D5B042] hover:underline text-[10px] font-semibold"
-                  >
-                    Usar Fino Esperado (100% Eficiencia)
-                  </button>
-                </div>
                 <div className="relative">
                   <input
                     type="number"
@@ -682,14 +671,62 @@ export default function ProcesosPage() {
                     placeholder="0.00"
                     value={recoveredWeight}
                     onChange={(e) => setRecoveredWeight(e.target.value)}
-                    className="w-full bg-black border border-neutral-800/40 rounded-lg pl-4 pr-12 py-3 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                    className="w-full bg-black border border-neutral-800/40 rounded-lg pl-4 pr-12 py-2 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
                     required
                   />
-                  <span className="absolute right-4 top-3 text-xs font-mono text-[#8C8C8C]">g Au</span>
+                  <span className="absolute right-4 top-2.5 text-xs font-mono text-[#8C8C8C]">{weightUnit}</span>
                 </div>
-                <span className="text-[10px] text-[#8C8C8C]/50 leading-normal block">
-                  *Esta masa fina recuperada se distribuirá proporcionalmente entre las barras originales del lote para garantizar la trazabilidad molecular.
-                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Ley de Oro Recuperada</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="1000"
+                      placeholder="Ej: 995"
+                      value={recoveredLey}
+                      onChange={(e) => setRecoveredLey(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg pl-4 pr-12 py-2 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                    />
+                    <span className="absolute right-4 top-2.5 text-xs font-mono text-[#8C8C8C]">‰ Au</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono text-[#8C8C8C] uppercase">Ley de Plata Recuperada</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="1000"
+                      placeholder="Ej: 5"
+                      value={recoveredLeyAg}
+                      onChange={(e) => setRecoveredLeyAg(e.target.value)}
+                      className="w-full bg-black border border-neutral-800/40 rounded-lg pl-4 pr-12 py-2 text-sm font-sans font-bold text-[#E5E5E5] focus:outline-none focus:border-[#D5B042] transition-colors"
+                    />
+                    <span className="absolute right-4 top-2.5 text-xs font-mono text-[#8C8C8C]">‰ Ag</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-neutral-800/20 pt-2 space-y-1">
+                <span className="text-[9px] font-mono text-[#8C8C8C] uppercase tracking-wider block">Herramientas de Carga</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => alert('Conexión con báscula externa — Próximamente')}
+                    className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all cursor-pointer">
+                    <Weight className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Báscula</span>
+                  </button>
+                  <button type="button" onClick={() => alert('Conexión con espectrómetro — Próximamente')}
+                    className="flex flex-col items-center gap-1 py-2 bg-black border border-neutral-800/40 rounded-lg hover:border-blue-500/30 hover:bg-blue-500/5 transition-all cursor-pointer">
+                    <Microscope className="w-4 h-4 text-blue-400" />
+                    <span className="text-[8px] font-mono text-[#8C8C8C] uppercase">Escaner</span>
+                  </button>
+                </div>
               </div>
 
               {modalError && (
@@ -702,16 +739,16 @@ export default function ProcesosPage() {
                 <button
                   type="button"
                   onClick={() => setActiveLotEl(null)}
-                  className="flex-1 py-3 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 bg-black hover:bg-[#141414] border border-neutral-800/40 text-gray-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
                 >
                   Cancelar colada
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-gradient-to-r from-[#A65B17] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider hover:brightness-110 transition-all duration-200 rounded-xl cursor-pointer shadow-[0_4px_12px_rgba(166,91,23,0.3)] flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-[#A65B17] to-[#D5B042] text-black font-semibold text-xs uppercase tracking-wider hover:brightness-110 transition-all duration-200 rounded-xl cursor-pointer shadow-[0_4px_12px_rgba(166,91,23,0.3)] flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4 text-black" />
-                  Confirmar colada (OUT-MOLD)
+                  Confirmar colada
                 </button>
               </div>
 

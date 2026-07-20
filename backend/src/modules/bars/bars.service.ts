@@ -202,6 +202,7 @@ export class BarsService {
 
     const existingCodes = await this.prisma.bar.findMany({
       where: {
+        clientId: clientId,
         barNumber: { in: barsToCreate.map((b) => b.barNumber) },
       },
       select: { barNumber: true },

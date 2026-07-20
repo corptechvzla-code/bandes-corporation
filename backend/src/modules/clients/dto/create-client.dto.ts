@@ -1,4 +1,10 @@
-import { IsNumberString, IsString, IsOptional, Length } from 'class-validator';
+import { IsNumberString, IsString, IsOptional, IsEnum, Length } from 'class-validator';
+
+enum ClientRole {
+  PROVEEDOR = 'PROVEEDOR',
+  CLIENTE = 'CLIENTE',
+  AMBOS = 'AMBOS',
+}
 
 export class CreateClientDto {
   @IsNumberString()
@@ -11,4 +17,8 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   contactInfo?: string;
+
+  @IsOptional()
+  @IsEnum(ClientRole)
+  role?: ClientRole;
 }

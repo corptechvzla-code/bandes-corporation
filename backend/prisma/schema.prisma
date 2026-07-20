@@ -19,13 +19,20 @@ enum ProcessStatus {
   CLOSED
 }
 
+enum ClientRole {
+  PROVEEDOR
+  CLIENTE
+  AMBOS
+}
+
 model Client {
-  id          String   @id @default(uuid())
-  rif         String   @unique
+  id          String      @id @default(uuid())
+  rif         String      @unique
   name        String
   contactInfo String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  role        ClientRole  @default(AMBOS)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   bars      Bar[]
   processes Process[]
@@ -64,7 +71,7 @@ model Lot {
 
 model Bar {
   id          String    @id @default(uuid())
-  barNumber   String    @unique
+  barNumber   String
   grossWeight Decimal   @db.Decimal(15, 4)
   purity      Decimal   @db.Decimal(7, 4)
   fineWeight  Decimal   @db.Decimal(15, 4)
@@ -80,6 +87,8 @@ model Bar {
   exitDetail   ExitDetail?  @relation(fields: [exitDetailId], references: [id])
   lotId        String?
   lot          Lot?         @relation(fields: [lotId], references: [id])
+
+  @@unique([clientId, barNumber])
 }
 
 model MaterialExit {

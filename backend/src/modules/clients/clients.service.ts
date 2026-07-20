@@ -19,18 +19,18 @@ export class ClientsService {
     return client;
   }
 
-  async create(data: { rif: string; name: string; contactInfo?: string }) {
+  async create(data: { rif: string; name: string; contactInfo?: string; role?: string }) {
     const normalizedRif = this.normalizeRif(data.rif);
 
     const existing = await this.prisma.client.findUnique({ where: { rif: normalizedRif } });
     if (existing) throw new BadRequestException('El RIF ya existe');
 
     return this.prisma.client.create({
-      data: { rif: normalizedRif, name: data.name.toUpperCase(), contactInfo: data.contactInfo },
+      data: { rif: normalizedRif, name: data.name.toUpperCase(), contactInfo: data.contactInfo, ...(data.role && { role: data.role as any }) },
     });
   }
 
-  async update(id: string, data: { rif?: string; name?: string; contactInfo?: string }) {
+  async update(id: string, data: { rif?: string; name?: string; contactInfo?: string; role?: string }) {
     const client = await this.findOne(id);
 
     if (data.rif) {
@@ -48,6 +48,7 @@ export class ClientsService {
         ...(data.rif && { rif: data.rif }),
         ...(data.name && { name: data.name.toUpperCase() }),
         ...(data.contactInfo !== undefined && { contactInfo: data.contactInfo }),
+        ...(data.role !== undefined && { role: data.role as any }),
       },
     });
   }

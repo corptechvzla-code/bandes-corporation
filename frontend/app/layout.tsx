@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GoldTraceabilityProvider } from '../src/context/GoldTraceabilityContext';
 import { Sidebar } from '../src/components/Sidebar';
+import { WeightToggle } from '../src/components/WeightToggle';
 import { Calendar } from 'lucide-react';
 import './globals.css';
 
@@ -27,6 +28,9 @@ export default function RootLayout({
   const activeTab = pathname.replace('/', '') || 'dashboard';
   const [systemTime, setSystemTime] = useState<string>('');
 
+  // Nombre del usuario (puedes cambiarlo aquí o conectarlo a tu estado de autenticación más adelante)
+  const userName = 'Administrador';
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -47,7 +51,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        <title>Bandes Corp - Trazabilidad de Oro</title>
+        <title>Control Mining</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
       <body>
@@ -64,12 +68,9 @@ export default function RootLayout({
                     
                     <div className="flex items-center gap-4">
                       <div className="hidden sm:flex flex-col">
-                        <span className="text-[10px] font-mono text-[#8C8C8C] uppercase tracking-widest">
-                          Estación de Trabajo / Auditoría
-                        </span>
                         <span className="text-sm font-semibold text-[#D5B042] uppercase tracking-wider flex items-center gap-2">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#D5B042] animate-pulse"></span>
-                          {activeTab} Module
+                          Bienvenido, {userName}
                         </span>
                       </div>
                     </div>
@@ -80,12 +81,14 @@ export default function RootLayout({
                         <span>2026-07-16</span>
                       </div>
 
+                      <WeightToggle />
+
                       <div className="flex items-center gap-2.5 bg-black border border-neutral-800/40 pl-2.5 pr-4 py-1 rounded-full shadow-inner">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#8C6D1F] to-[#D5B042] flex items-center justify-center text-black font-bold text-xs">
-                          A
+                          {userName.charAt(0)}
                         </div>
                         <div className="hidden sm:flex flex-col text-left">
-                          <span className="text-[11px] font-bold text-[#E5E5E5] leading-none">Administrador</span>
+                          <span className="text-[11px] font-bold text-[#E5E5E5] leading-none">{userName}</span>
                           <span className="text-[9px] text-[#8C8C8C] font-mono mt-0.5 leading-none">Owner</span>
                         </div>
                       </div>

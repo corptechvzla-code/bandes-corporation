@@ -5,12 +5,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useBars } from '@/hooks/useBars';
 import { useMaterialExits } from '@/hooks/useExits';
 import { useClients } from '@/hooks/useClients';
-import { formatNumber } from '@/lib/format';
+import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
 import {
-  Flame, ClipboardList, CheckCircle2, TrendingUp, Scale,
-  Clock, ArrowUpRight, Sparkles, Coins, ArrowLeftRight,
+  Flame, ClipboardList, Scale, Coins, TrendingDown,
+  ChevronDown, ChevronUp, Table2, Warehouse
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { formatNumber, formatWeight } from '@/lib/format';
+import { useGoldTraceability } from '@/context/GoldTraceabilityContext';
 
 interface TreemapRect {
   id: string; x: number; y: number; w: number; h: number;
@@ -46,20 +48,51 @@ function generateBarsLayout(items: any[], w: number, h: number): TreemapRect[] {
   });
 }
 
+// Componente personalizado para el Tooltip de la gráfica
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#1E1E22] border border-[#323238] rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)] p-3.5 min-w-[150px] backdrop-blur-xs">
+        <p className="text-[#8C8C8C] font-bold text-[10px] uppercase tracking-wider mb-2 font-mono">
+          {label}
+        </p>
+        <div className="space-y-1.5">
+          {payload.map((entry: any) => {
+            const isIn = entry.name === 'in';
+            const labelColor = isIn ? '#22C55E' : '#D5B042';
+            const labelText = isIn ? 'Ingreso' : 'Egreso';
+            return (
+              <div key={entry.name} className="flex justify-between items-center text-xs font-sans gap-4">
+                <span style={{ color: labelColor }} className="font-bold">
+                  {labelText}
+                </span>
+                <span className="text-[#E5E5E5] font-mono">
+                  {entry.payload.weightUnit === 'kg'
+                    ? `${(entry.value / 1000).toLocaleString(undefined, { minimumFractionDigits: 4 })} kg`
+                    : `${entry.value.toLocaleString(undefined, { minimumFractionDigits: 1 })} g`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function DashboardPage() {
   const { data: bars = [] } = useBars();
   const { data: clients = [] } = useClients();
   const { data: exits = [] } = useMaterialExits();
+  const { data: metrics, isLoading } = useDashboardMetrics();
+  const { weightUnit } = useGoldTraceability();
   const [hoveredSupplier, setHoveredSupplier] = useState<any | null>(null);
   const [hoveredClient, setHoveredClient] = useState<any | null>(null);
   const [supplierLayout, setSupplierLayout] = useState<'grid' | 'bars'>('grid');
   const [clientLayout, setClientLayout] = useState<'grid' | 'bars'>('grid');
-
-  const inStockBars = bars.filter(b => b.status === 'IN_STOCK');
-  const todayBarsCount = inStockBars.length;
-  const todayBarsWeight = inStockBars.reduce((s, b) => s + Number(b.grossWeight), 0);
-
-  const exitedWeight = bars.filter(b => b.status === 'EXITED').reduce((s, b) => s + Number(b.fineWeight), 0);
+  const [showSupplierTable, setShowSupplierTable] = useState<boolean>(false);
+  const [showClientTable, setShowClientTable] = useState<boolean>(false);
 
   const supplierData = clients.map(c => {
     const cBars = bars.filter(b => b.clientId === c.id);
@@ -76,23 +109,23 @@ export default function DashboardPage() {
   }).filter(c => c.value > 0).sort((a, b) => b.value - a.value);
 
   const flowData = useMemo(() => {
-    const days: Record<string, { date: string; dateShort: string; in: number; out: number }> = {};
+    const days: Record<string, { date: string; dateShort: string; in: number; out: number; weightUnit: string }> = {};
     bars.forEach(b => {
       const d = new Date(b.createdAt);
       const key = d.toISOString().split('T')[0];
       const short = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-      if (!days[key]) days[key] = { date: key, dateShort: short, in: 0, out: 0 };
+      if (!days[key]) days[key] = { date: key, dateShort: short, in: 0, out: 0, weightUnit: weightUnit };
       days[key].in += Number(b.fineWeight);
     });
     exits.forEach(e => {
       const d = new Date(e.createdAt);
       const key = d.toISOString().split('T')[0];
       const short = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-      if (!days[key]) days[key] = { date: key, dateShort: short, in: 0, out: 0 };
+      if (!days[key]) days[key] = { date: key, dateShort: short, in: 0, out: 0, weightUnit: weightUnit };
       days[key].out += Number(e.totalWeight);
     });
     return Object.values(days).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(-7);
-  }, [bars, exits]);
+  }, [bars, exits, weightUnit]);
 
   const colors = [
     { s1: '#B4941E', s2: '#7E6611' }, { s1: '#A65B17', s2: '#733D0D' },
@@ -141,7 +174,11 @@ export default function DashboardPage() {
                   textAnchor="middle" fill="#E5E5E5"
                   className="font-sans font-bold text-xs uppercase tracking-wider fill-current select-none pointer-events-none">{item.code}</text>}
                 {hasGrams && <text x={tx} y={hasLey ? ty + 6 : ty + 10} textAnchor="middle" fill="#D5B042"
-                  className="font-mono text-[10px] font-bold select-none pointer-events-none">{Math.round(item.value).toLocaleString()} g</text>}
+                  className="font-mono text-[10px] font-bold select-none pointer-events-none">
+                  {weightUnit === 'kg'
+                    ? `${(item.value / 1000).toLocaleString(undefined, { minimumFractionDigits: 4 })} kg`
+                    : `${Math.round(item.value).toLocaleString()} g`}
+                </text>}
                 {hasLey && isSupplier && <text x={tx} y={ty + 22} textAnchor="middle" fill="#E5E5E5" fillOpacity={0.8}
                   className="font-mono text-[9px] select-none pointer-events-none">Pureza {item.avgPurity}‰</text>}
               </g>
@@ -150,11 +187,15 @@ export default function DashboardPage() {
         </svg>
         <AnimatePresence>{hovered && (
           <motion.div key="tip" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-            className={`absolute top-2 left-2 z-20 bg-[#1C1C1C] border-l-4 ${isSupplier ? 'border-[#D5B042]' : 'border-[#A65B17]'} border-y border-r border-neutral-800/40 p-3 rounded shadow-[0_4px_12px_rgba(0,0,0,0.6)] backdrop-blur-xs max-w-xs`}>
+            className={`absolute top-2 left-2 z-20 bg-[#161619] border-l-4 ${isSupplier ? 'border-[#D5B042]' : 'border-[#A65B17]'} border-y border-r border-neutral-800/40 p-3 rounded shadow-[0_4px_12px_rgba(0,0,0,0.6)] backdrop-blur-xs max-w-xs`}>
             <h4 className="text-xs font-bold text-[#E5E5E5] tracking-wide uppercase">{hovered.name}</h4>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-[11px] font-mono">
               <span className="text-[#8C8C8C]">{isSupplier ? 'Total Ingresado:' : 'Total Despachado:'}</span>
-              <span className="text-[#D5B042] font-bold text-right">{Math.round(hovered.value).toLocaleString()} g</span>
+              <span className="text-[#D5B042] font-bold text-right">
+                {weightUnit === 'kg'
+                  ? `${(hovered.value / 1000).toLocaleString(undefined, { minimumFractionDigits: 4 })} kg`
+                  : `${Math.round(hovered.value).toLocaleString()} g`}
+              </span>
               <span className="text-[#8C8C8C]">{isSupplier ? 'Barras:' : 'Operaciones:'}</span>
               <span className="text-[#E5E5E5] text-right">{hovered.count} {isSupplier ? 'u' : 'envíos'}</span>
             </div>
@@ -166,60 +207,90 @@ export default function DashboardPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        
+        {/* Tarjeta 1: ORO RECIBIDO */}
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#D5B042]/5 to-transparent rounded-bl-full pointer-events-none"></div>
           <div className="flex justify-between items-center mb-3">
             <div className="p-2 bg-black rounded-lg border border-[#D5B042]/20"><ClipboardList className="w-5 h-5 text-[#D5B042]" /></div>
-            <span className="text-[9px] text-[#D5B042] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#D5B042]/20"><TrendingUp className="w-2.5 h-2.5" /> REGISTRO</span>
+            <span className="text-[9px] text-[#D5B042] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#D5B042]/20">REGISTRO</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Barras en Bóveda (IN_STOCK)</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{todayBarsCount}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">Unidades</span>
+            <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Oro recibido</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate">
+                {formatWeight(metrics?.oroRecibido.fineWeight ?? 0, weightUnit)}
+              </span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Scale className="w-3 h-3 text-[#D5B042]" />Peso Total Bruto: <strong className="text-[#E5E5E5]">{(todayBarsWeight / 1000).toFixed(2)} kg</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Scale className="w-3 h-3 text-[#D5B042] shrink-0" />FA total: <strong className="text-[#E5E5E5] truncate">{formatWeight(metrics?.oroRecibido.fineWeight ?? 0, weightUnit)}</strong>
             </p>
           </div>
         </motion.div>
 
+        {/* Tarjeta 2: ORO EN PROCESO */}
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#A65B17]/5 to-transparent rounded-bl-full pointer-events-none"></div>
           <div className="flex justify-between items-center mb-3">
             <div className="p-2 bg-black rounded-lg border border-[#A65B17]/20"><Flame className="w-5 h-5 text-[#A65B17] animate-pulse" /></div>
-            <span className="text-[9px] text-[#A65B17] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#A65B17]/20"><Clock className="w-2.5 h-2.5 animate-spin" style={{ animationDuration: '6s' }} /> FUNDICIÓN</span>
+            <span className="text-[9px] text-[#A65B17] font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-[#A65B17]/20">FUNDICIÓN</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Total Clientes Registrados</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{clients.length}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">Clientes</span>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Oro en proceso</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate">
+                {formatWeight(metrics?.oroEnProceso.fineWeight ?? 0, weightUnit)}
+              </span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <Sparkles className="w-3 h-3 text-[#A65B17]" />Barras totales: <strong className="text-[#E5E5E5]">{bars.length} u</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Flame className="w-3 h-3 text-[#A65B17] shrink-0" />Barras en horno: <strong className="text-[#E5E5E5] truncate">{metrics?.oroEnProceso.barCount ?? 0} u</strong>
             </p>
           </div>
         </motion.div>
 
+        {/* Tarjeta 3: ORO EN BÓVEDA */}
         <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28, duration: 0.55 }}
-          className="relative group bg-[#1C1C1C] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-emerald-500/30">
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-emerald-500/30">
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
           <div className="flex justify-between items-center mb-3">
-            <div className="p-2 bg-black rounded-lg border border-emerald-500/20"><CheckCircle2 className="w-5 h-5 text-emerald-500" /></div>
-            <span className="text-[9px] text-emerald-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-emerald-500/10">✓ EGRESOS</span>
+            <div className="p-2 bg-black rounded-lg border border-emerald-500/20"><Warehouse className="w-5 h-5 text-emerald-500" /></div>
+            <span className="text-[9px] text-emerald-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-emerald-500/10">DISPONIBLE</span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[10.5px] text-[#8C8C8C] block font-sans">Total Egresado (Peso Fino)</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight">{(exitedWeight / 1000).toFixed(3)}</span>
-              <span className="text-[10.5px] text-[#8C8C8C]">kg Au</span>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Oro en bóveda</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate">
+                {formatWeight(metrics?.oroEnBoveda.fineWeight ?? 0, weightUnit)}
+              </span>
             </div>
-            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20">
-              <ArrowUpRight className="w-3 h-3 text-emerald-400" />Operaciones de Salida: <strong className="text-[#E5E5E5]">{exits.length}</strong>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Warehouse className="w-3 h-3 text-emerald-400 shrink-0" />R neto disponible: <strong className="text-[#E5E5E5] truncate">{formatWeight(metrics?.oroEnBoveda.fineWeight ?? 0, weightUnit)}</strong>
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Tarjeta 4: MERMA */}
+        <motion.div initial={{ opacity: 0, y: -80 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38, duration: 0.55 }}
+          className="relative group bg-[#161619] p-4.5 rounded-xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.2)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-red-500/30">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-red-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="p-2 bg-black rounded-lg border border-red-500/20"><TrendingDown className="w-5 h-5 text-red-400" /></div>
+            <span className="text-[9px] text-red-400 font-mono tracking-wider flex items-center gap-1 bg-black px-1.5 py-0.5 rounded border border-red-500/10">PÉRDIDA</span>
+          </div>
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] text-[#8C8C8C] block font-sans truncate">Merma</span>
+            <div className="flex items-baseline gap-1.5 overflow-hidden">
+              <span className="text-xl lg:text-2xl font-mono font-bold text-[#E5E5E5] tracking-tight truncate">
+                {formatNumber(metrics?.merma.porcentaje ?? 0, 1)}<span className="text-lg">%</span>
+              </span>
+              <span className="text-[10.5px] text-[#8C8C8C] shrink-0">Merma</span>
+            </div>
+            <p className="text-[10px] text-[#8C8C8C] font-mono flex items-center gap-1 pt-1.5 border-t border-neutral-800/20 truncate">
+              <Scale className="w-3 h-3 text-red-400 shrink-0" />Pérdida Total: <strong className="text-[#E5E5E5] truncate">{formatWeight(metrics?.merma.gramos ?? 0, weightUnit)} Au</strong>
             </p>
           </div>
         </motion.div>
@@ -227,7 +298,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.5 }}
-          className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
+          className="bg-[#161619] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-6">
             <div>
               <h3 className="font-sans font-semibold text-[#E5E5E5] text-base">Ingresos de Clientes (Proporción de Masa)</h3>
@@ -247,14 +318,51 @@ export default function DashboardPage() {
             {supplierData.map((s, idx) => (
               <div key={s.id} className="flex items-center gap-1.5 text-[10px] font-mono text-[#8C8C8C]">
                 <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: colors[idx % colors.length].s1 }}></span>
-                <span>{s.code}: {Math.round(s.value / 1000)}kg ({Math.round((s.value / (supplierData.reduce((x, y) => x + y.value, 0) || 1)) * 100)}%)</span>
+                <span>{s.code}: {weightUnit === 'kg' ? `${(s.value / 1000).toFixed(4)} kg` : `${Math.round(s.value).toLocaleString()} g`} ({Math.round((s.value / (supplierData.reduce((x, y) => x + y.value, 0) || 1)) * 100)}%)</span>
               </div>
             ))}
           </div>
+          <button onClick={() => setShowSupplierTable(!showSupplierTable)}
+            className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-black/50 hover:bg-black border border-neutral-800/40 rounded-lg text-[10px] font-mono text-[#8C8C8C] hover:text-[#E5E5E5] transition-colors cursor-pointer">
+            <Table2 className="w-3.5 h-3.5" />
+            {showSupplierTable ? 'Ocultar' : 'Ver'} Detalle por Cliente
+            {showSupplierTable ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          {showSupplierTable && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans">
+                <thead>
+                  <tr className="border-b border-neutral-800/40 text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider">
+                    <th className="py-2">Cliente</th>
+                    <th className="py-2 text-right">Bruto ({weightUnit})</th>
+                    <th className="py-2 text-right">FA ({weightUnit})</th>
+                    <th className="py-2 text-right">Barras</th>
+                    <th className="py-2 text-right">Pureza</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-800/20">
+                  {supplierData.map(s => (
+                    <tr key={s.id} className="hover:bg-black/40 transition-colors">
+                      <td className="py-2 font-medium text-[#E5E5E5]">{s.name}</td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">
+                        {weightUnit === 'kg' ? (s.value / 1000).toFixed(4) : Math.round(s.value).toLocaleString()}
+                      </td>
+                      <td className="py-2 text-right font-mono text-[#D5B042]">
+                        {weightUnit === 'kg' ? (s.value / 1000).toFixed(4) : Math.round(s.value).toLocaleString()}
+                      </td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{s.count} u</td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{s.avgPurity}‰</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </motion.div>
+          )}
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.52, duration: 0.5 }}
-          className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
+          className="bg-[#161619] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#A65B17]/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-6">
             <div>
               <h3 className="font-sans font-semibold text-[#E5E5E5] text-base">Egresos por Cliente</h3>
@@ -274,15 +382,46 @@ export default function DashboardPage() {
             {clientData.map((c, idx) => (
               <div key={c.id} className="flex items-center gap-1.5 text-[10px] font-mono text-[#8C8C8C]">
                 <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: colors[(idx + 3) % colors.length].s1 }}></span>
-                <span>{c.code}: {Math.round(c.value / 1000)}kg ({Math.round((c.value / (clientData.reduce((x, y) => x + y.value, 0) || 1)) * 100)}%)</span>
+                <span>{c.code}: {weightUnit === 'kg' ? `${(c.value / 1000).toFixed(4)} kg` : `${Math.round(c.value).toLocaleString()} g`} ({Math.round((c.value / (clientData.reduce((x, y) => x + y.value, 0) || 1)) * 100)}%)</span>
               </div>
             ))}
           </div>
+          <button onClick={() => setShowClientTable(!showClientTable)}
+            className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-black/50 hover:bg-black border border-neutral-800/40 rounded-lg text-[10px] font-mono text-[#8C8C8C] hover:text-[#E5E5E5] transition-colors cursor-pointer">
+            <Table2 className="w-3.5 h-3.5" />
+            {showClientTable ? 'Ocultar' : 'Ver'} Detalle por Cliente
+            {showClientTable ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          {showClientTable && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans">
+                <thead>
+                  <tr className="border-b border-neutral-800/40 text-[10px] font-mono text-[#8C8C8C] uppercase tracking-wider">
+                    <th className="py-2">Cliente</th>
+                    <th className="py-2 text-right">Despachado ({weightUnit})</th>
+                    <th className="py-2 text-right">Envíos</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-800/20">
+                  {clientData.map(c => (
+                    <tr key={c.id} className="hover:bg-black/40 transition-colors">
+                      <td className="py-2 font-medium text-[#E5E5E5]">{c.name}</td>
+                      <td className="py-2 text-right font-mono text-[#D5B042]">
+                        {weightUnit === 'kg' ? (c.value / 1000).toFixed(4) : Math.round(c.value).toLocaleString()}
+                      </td>
+                      <td className="py-2 text-right font-mono text-[#8C8C8C]">{c.count} envíos</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </motion.div>
+          )}
         </motion.div>
       </div>
 
       <motion.div initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}
-        className="bg-[#1C1C1C] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
+        className="bg-[#161619] p-6 rounded-2xl border border-neutral-800/40 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] hover:border-[#D5B042]/30">
         <div className="flex items-center justify-between mb-4 border-b border-neutral-800/20 pb-3">
           <div>
             <h3 className="font-sans font-semibold text-[#E5E5E5] text-base">Flujo de Trazabilidad</h3>
@@ -298,32 +437,53 @@ export default function DashboardPage() {
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={flowData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#22C55E" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#166534" stopOpacity={0.7} />
+                  </linearGradient>
+                  <linearGradient id="bronzeGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#D5B042" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#A65B17" stopOpacity={0.7} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-                <XAxis dataKey="dateShort" stroke="#8C8C8C" tick={{ fontSize: 10, fill: '#8C8C8C' }} axisLine={{ stroke: '#2A2A2A' }} tickLine={false} />
+                <XAxis dataKey="dateShort" stroke="#525151" tick={{ fontSize: 10, fill: '#8C8C8C' }} axisLine={{ stroke: '#2A2A2A' }} tickLine={false} />
                 <YAxis stroke="#8C8C8C" tick={{ fontSize: 10, fill: '#8C8C8C' }} axisLine={{ stroke: '#2A2A2A' }} tickLine={false}
-                  tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}kg` : `${v}g`} />
-                <Tooltip cursor={{ fill: 'rgba(180, 148, 30, 0.06)' }}
-                  contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid #B4941E', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', padding: '10px 14px' }}
-                  labelStyle={{ color: '#D5B042', fontWeight: 700, fontSize: 12, marginBottom: 4 }}
-                  formatter={(value: number, name: string) => [`${value.toLocaleString(undefined, { minimumFractionDigits: 1 })} g`, name === 'in' ? 'Ingresos (IN)' : 'Egresos (OUT)']} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: '#8C8C8C', paddingTop: 8 }}
-                  formatter={(value: string) => value === 'in' ? 'Ingresos (IN)' : 'Egresos (OUT)'} />
-                <Bar dataKey="in" name="in" radius={[4, 4, 0, 0]} animationDuration={1000} animationEasing="ease-out" maxBarSize={40}>
-                  {flowData.map((_, idx) => (<Cell key={`in-${idx}`} fill={`url(#greenGrad-${idx})`} />))}
-                </Bar>
-                <Bar dataKey="out" name="out" radius={[4, 4, 0, 0]} animationDuration={1000} animationEasing="ease-out" animationBegin={200} maxBarSize={40}>
-                  {flowData.map((_, idx) => (<Cell key={`out-${idx}`} fill={`url(#bronzeGrad-${idx})`} />))}
-                </Bar>
-                <defs>{flowData.map((_, idx) => (
-                  <React.Fragment key={`grads-${idx}`}>
-                    <linearGradient id={`greenGrad-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22C55E" stopOpacity={0.9} /><stop offset="100%" stopColor="#166534" stopOpacity={0.7} />
-                    </linearGradient>
-                    <linearGradient id={`bronzeGrad-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#D5B042" stopOpacity={0.9} /><stop offset="100%" stopColor="#A65B17" stopOpacity={0.7} />
-                    </linearGradient>
-                  </React.Fragment>
-                ))}</defs>
+                  tickFormatter={(v: number) => weightUnit === 'kg' ? `${(v / 1000).toFixed(2)} kg` : `${v.toFixed(0)} g`} />
+                
+                <Tooltip 
+                  cursor={{ fill: 'rgba(213, 176, 66, 0.04)' }} 
+                  content={<CustomTooltip />} 
+                />
+
+                <Legend 
+                  iconType="circle" 
+                  iconSize={8} 
+                  wrapperStyle={{ fontSize: 11, color: '#8C8C8C', paddingTop: 8 }}
+                  formatter={(value: string) => value === 'in' ? 'Ingreso' : 'Egreso'} 
+                />
+                
+                <Bar 
+                  dataKey="in" 
+                  name="in" 
+                  fill="url(#greenGrad)"
+                  radius={[4, 4, 0, 0]} 
+                  animationDuration={1000} 
+                  animationEasing="ease-out" 
+                  maxBarSize={40} 
+                />
+                
+                <Bar 
+                  dataKey="out" 
+                  name="out" 
+                  fill="url(#bronzeGrad)"
+                  radius={[4, 4, 0, 0]} 
+                  animationDuration={1000} 
+                  animationEasing="ease-out" 
+                  animationBegin={200} 
+                  maxBarSize={40} 
+                />
               </BarChart>
             </ResponsiveContainer>
           )}

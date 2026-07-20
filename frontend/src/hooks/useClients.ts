@@ -2,12 +2,15 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Client, BalanceResponse, CreateClientRequest } from '@/types/api';
+import type { Client, BalanceResponse, CreateClientRequest, ClientRole } from '@/types/api';
 
-export function useClients() {
+export function useClients(filters?: { role?: ClientRole }) {
   return useQuery<Client[]>({
-    queryKey: ['clients'],
+    queryKey: ['clients', filters?.role],
     queryFn: () => api.get('/clients').then((r) => r.data),
+    select: filters?.role
+      ? (data) => data.filter(c => c.role === filters.role || c.role === 'AMBOS')
+      : undefined,
   });
 }
 
